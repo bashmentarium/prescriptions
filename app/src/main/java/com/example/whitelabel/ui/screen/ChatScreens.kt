@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,7 +22,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
-import com.example.whitelabel.data.FakeLlmService
+import com.example.whitelabel.data.RealAnthropicService
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,21 +54,23 @@ fun ChatListScreen(onOpenChat: (String) -> Unit) {
     }
 }
 
-data class ChatMessage(val fromUser: Boolean, val text: String = "", val image: Uri? = null)
+data class ChatMessage(val fromUser: Boolean, val text: String = "", val image: Uri? = null, val isProcessing: Boolean = false)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatDetailScreen(onOpenSchedule: () -> Unit) {
+fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val input = remember { mutableStateOf("") }
-    val llm: LlmService = remember { FakeLlmService() }
+    val llm: LlmService = remember { RealAnthropicService() }
+    val scope = rememberCoroutineScope()
+    val gson = remember { Gson() }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) messages.add(ChatMessage(true, image = uri))
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Chat") }) }
+        topBar = { TopAppBar(title = { Text("Chat") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }) }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
@@ -77,7 +83,13 @@ fun ChatDetailScreen(onOpenSchedule: () -> Unit) {
                             contentScale = ContentScale.FillWidth
                         )
                     }
-                    if (m.text.isNotBlank()) Text(m.text)
+                    if (m.text.isNotBlank()) {
+                        if (m.isProcessing) {
+                            Text("Processing prescription...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                 }
             }
@@ -88,8 +100,39 @@ fun ChatDetailScreen(onOpenSchedule: () -> Unit) {
                 TextField(value = input.value, onValueChange = { input.value = it }, modifier = Modifier.weight(1f))
                 Button(onClick = {
                     if (input.value.isBlank()) return@Button
-                    messages.add(ChatMessage(true, text = input.value))
-                    messages.add(ChatMessage(false, text = "Proposed schedule parsed. Continue to set timing."))
+                    val userMessage = ChatMessage(true, text = input.value)
+                    messages.add(userMessage)
+                    
+                    val processingMessage = ChatMessage(false, text = "", isProcessing = true)
+                    messages.add(processingMessage)
+                    
+                    scope.launch {
+                        try {
+                            val result = llm.parseFromText(input.value)
+                            messages.remove(processingMessage)
+                            
+                            when (result) {
+                                is com.example.whitelabel.data.LlmResult.Success -> {
+                                    val jsonText = result.normalizedSchedule
+                                    try {
+                                        // Try to parse and format the JSON response
+                                        val jsonElement = gson.fromJson(jsonText, Any::class.java)
+                                        val formattedJson = gson.toJson(jsonElement)
+                                        messages.add(ChatMessage(false, text = "Prescription parsed successfully:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
+                                    } catch (e: Exception) {
+                                        messages.add(ChatMessage(false, text = "Prescription parsed:\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                    }
+                                }
+                                is com.example.whitelabel.data.LlmResult.Error -> {
+                                    messages.add(ChatMessage(false, text = "Error: ${result.message}"))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            messages.remove(processingMessage)
+                            messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
+                        }
+                    }
+                    
                     input.value = ""
                 }) { Text("Send") }
             }
@@ -100,14 +143,14 @@ fun ChatDetailScreen(onOpenSchedule: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleBuilderScreen(onConfirm: (startMillis: Long, earliest: Int, latest: Int, days: Int) -> Unit) {
+fun ScheduleBuilderScreen(onBack: () -> Unit, onConfirm: (startMillis: Long, earliest: Int, latest: Int, days: Int) -> Unit) {
     val startMillis = remember { mutableStateOf(nowAtMidnight()) }
     val earliest = remember { mutableStateOf(8 * 60) }
     val latest = remember { mutableStateOf(20 * 60) }
     val days = remember { mutableStateOf(7) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Schedule") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("Schedule") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Start: ${formatDate(startMillis.value)}")

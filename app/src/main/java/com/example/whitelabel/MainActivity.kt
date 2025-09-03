@@ -67,7 +67,7 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, days: Int) 
             ChatListScreen(onOpenChat = { id -> navController.navigate("chat/$id") })
         }
         composable("chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
-            ChatDetailScreen(onOpenSchedule = { navController.navigate("schedule") })
+            ChatDetailScreen(onBack = { navController.popBackStack() }, onOpenSchedule = { navController.navigate("schedule") })
         }
         composable("schedule") {
             val hasCalendarPermission = remember { mutableStateOf(false) }
@@ -80,7 +80,7 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, days: Int) 
             LaunchedEffect(Unit) {
                 requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
             }
-            ScheduleBuilderScreen(onConfirm = { start, earliest, _, days ->
+            ScheduleBuilderScreen(onBack = { navController.popBackStack() }, onConfirm = { start, earliest, _, days ->
                 if (hasCalendarPermission.value) onInsertEvents(start, earliest, days)
                 navController.popBackStack()
             })
