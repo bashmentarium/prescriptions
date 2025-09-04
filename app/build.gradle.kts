@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,7 +20,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        buildConfigField("String", "ANTHROPIC_API_KEY", "\"${System.getenv("ANTHROPIC_API_KEY") ?: ""}\"")
+        // Read API key from local.properties
+        val properties = gradleLocalProperties(rootDir)
+        val apiKey = properties.getProperty("ANTHROPIC_API_KEY", "")
+        buildConfigField("String", "ANTHROPIC_API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
@@ -30,7 +36,10 @@ android {
             buildConfigField("String", "ANTHROPIC_API_KEY", "\"\"")
         }
         debug {
-            buildConfigField("String", "ANTHROPIC_API_KEY", "\"${System.getenv("ANTHROPIC_API_KEY") ?: ""}\"")
+            // Read API key from local.properties for debug builds too
+            val properties = gradleLocalProperties(rootDir)
+            val apiKey = properties.getProperty("ANTHROPIC_API_KEY", "")
+            buildConfigField("String", "ANTHROPIC_API_KEY", "\"$apiKey\"")
         }
     }
     compileOptions {
@@ -80,4 +89,13 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+fun gradleLocalProperties(rootDir: File): Properties {
+    val properties = Properties()
+    val localPropertiesFile = File(rootDir, "local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { properties.load(it) }
+    }
+    return properties
 }
