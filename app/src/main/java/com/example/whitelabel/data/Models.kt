@@ -17,6 +17,26 @@ data class TreatmentCourse(
     val durationDays: Int
 )
 
+data class ParsedMedication(
+    val name: String,
+    val dosage: String,
+    val frequency: String,
+    val duration: String,
+    val instructions: String
+)
+
+data class ParsedSchedule(
+    val times_per_day: Int,
+    val preferred_times: List<String>,
+    val with_food: Boolean,
+    val duration_days: Int
+)
+
+data class ParsedPrescription(
+    val medications: List<ParsedMedication>,
+    val schedule: ParsedSchedule
+)
+
 sealed interface LlmResult {
     data class Success(val normalizedSchedule: String) : LlmResult
     data class Error(val message: String) : LlmResult

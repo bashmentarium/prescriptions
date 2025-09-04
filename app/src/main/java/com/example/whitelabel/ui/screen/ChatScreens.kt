@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
+import com.example.whitelabel.data.ParsedPrescription
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
@@ -58,12 +59,13 @@ data class ChatMessage(val fromUser: Boolean, val text: String = "", val image: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
+fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val input = remember { mutableStateOf("") }
     val llm: LlmService = remember { RealAnthropicService() }
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
+    val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) messages.add(ChatMessage(true, image = uri))
@@ -118,16 +120,22 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
                                 is com.example.whitelabel.data.LlmResult.Success -> {
                                     val jsonText = result.normalizedSchedule
                                     try {
-                                        // Try to parse and format the JSON response
-                                        val jsonElement = gson.fromJson(jsonText, Any::class.java)
-                                        val formattedJson = gson.toJson(jsonElement)
+                                        // Parse the JSON response into ParsedPrescription
+                                        val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
+                                        parsedPrescription.value = prescription
+                                        
+                                        // Format and display the parsed prescription
+                                        val formattedJson = gson.toJson(prescription)
                                         messages.add(ChatMessage(false, text = "Prescription parsed successfully:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
                                     } catch (e: Exception) {
-                                        messages.add(ChatMessage(false, text = "Prescription parsed:\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                        // If parsing fails, show the raw response
+                                        messages.add(ChatMessage(false, text = "Prescription parsed (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                        parsedPrescription.value = null
                                     }
                                 }
                                 is com.example.whitelabel.data.LlmResult.Error -> {
                                     messages.add(ChatMessage(false, text = "Error: ${result.message}"))
+                                    parsedPrescription.value = null
                                 }
                             }
                         } catch (e: Exception) {
@@ -137,22 +145,76 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
                     }
                 }) { Text("Send") }
             }
-            Button(onClick = onOpenSchedule, modifier = Modifier.padding(12.dp).fillMaxWidth()) { Text("Set Timing & Approve") }
+            Button(onClick = { onOpenSchedule(parsedPrescription.value) }, modifier = Modifier.padding(12.dp).fillMaxWidth()) { Text("Set Timing & Approve") }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleBuilderScreen(onBack: () -> Unit, onConfirm: (startMillis: Long, earliest: Int, latest: Int, days: Int) -> Unit) {
+fun ScheduleBuilderScreen(
+    onBack: () -> Unit, 
+    onConfirm: (startMillis: Long, earliest: Int, latest: Int, days: Int) -> Unit,
+    parsedPrescription: ParsedPrescription? = null
+) {
     val startMillis = remember { mutableStateOf(nowAtMidnight()) }
     val earliest = remember { mutableStateOf(8 * 60) }
     val latest = remember { mutableStateOf(20 * 60) }
     val days = remember { mutableStateOf(7) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // Pre-populate values from parsed prescription
+    LaunchedEffect(parsedPrescription) {
+        parsedPrescription?.let { prescription ->
+            // Set duration days from prescription
+            days.value = prescription.schedule.duration_days
+            
+            // Set time range based on preferred times
+            val schedule = prescription.schedule
+            when {
+                schedule.preferred_times.contains("morning") && schedule.preferred_times.contains("evening") -> {
+                    earliest.value = 8 * 60 // 8:00 AM
+                    latest.value = 20 * 60  // 8:00 PM
+                }
+                schedule.preferred_times.contains("morning") -> {
+                    earliest.value = 7 * 60  // 7:00 AM
+                    latest.value = 12 * 60   // 12:00 PM
+                }
+                schedule.preferred_times.contains("afternoon") -> {
+                    earliest.value = 12 * 60 // 12:00 PM
+                    latest.value = 17 * 60   // 5:00 PM
+                }
+                schedule.preferred_times.contains("evening") -> {
+                    earliest.value = 17 * 60 // 5:00 PM
+                    latest.value = 22 * 60   // 10:00 PM
+                }
+                else -> {
+                    // Default to morning if no specific times
+                    earliest.value = 8 * 60
+                    latest.value = 20 * 60
+                }
+            }
+        }
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Schedule") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Display parsed prescription information
+            parsedPrescription?.let { prescription ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Parsed Prescription", style = MaterialTheme.typography.titleMedium)
+                        prescription.medications.forEach { med ->
+                            Text("• ${med.name}: ${med.dosage} - ${med.frequency}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("Duration: ${prescription.schedule.duration_days} days", style = MaterialTheme.typography.bodySmall)
+                        Text("Times per day: ${prescription.schedule.times_per_day}", style = MaterialTheme.typography.bodySmall)
+                        if (prescription.schedule.with_food) {
+                            Text("Take with food", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Start: ${formatDate(startMillis.value)}")
                 Button(onClick = {
