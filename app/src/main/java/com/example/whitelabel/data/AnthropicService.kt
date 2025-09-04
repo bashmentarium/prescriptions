@@ -61,6 +61,8 @@ class RealAnthropicService : LlmService {
             try {
                 Log.d("AnthropicService", "Starting API call for text: $text")
 
+
+
                 val prompt = """
                     You are a medical prescription parser. Extract the following information from this prescription text and format it as JSON:
                     

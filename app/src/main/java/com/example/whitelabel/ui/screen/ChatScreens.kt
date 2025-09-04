@@ -100,15 +100,18 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
                 TextField(value = input.value, onValueChange = { input.value = it }, modifier = Modifier.weight(1f))
                 Button(onClick = {
                     if (input.value.isBlank()) return@Button
-                    val userMessage = ChatMessage(true, text = input.value)
+                    val userInput = input.value // Store the input before clearing
+                    val userMessage = ChatMessage(true, text = userInput)
                     messages.add(userMessage)
                     
                     val processingMessage = ChatMessage(false, text = "", isProcessing = true)
                     messages.add(processingMessage)
                     
+                    input.value = "" // Clear input immediately after storing
+                    
                     scope.launch {
                         try {
-                            val result = llm.parseFromText(input.value)
+                            val result = llm.parseFromText(userInput) // Use stored input
                             messages.remove(processingMessage)
                             
                             when (result) {
@@ -132,8 +135,6 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: () -> Unit) {
                             messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
                         }
                     }
-                    
-                    input.value = ""
                 }) { Text("Send") }
             }
             Button(onClick = onOpenSchedule, modifier = Modifier.padding(12.dp).fillMaxWidth()) { Text("Set Timing & Approve") }
