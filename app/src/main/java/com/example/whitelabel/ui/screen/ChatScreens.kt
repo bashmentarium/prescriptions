@@ -3,6 +3,9 @@ package com.example.whitelabel.ui.screen
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.net.Uri
+import android.content.ContentResolver
+import android.database.Cursor
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,15 +14,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
@@ -57,6 +66,22 @@ fun ChatListScreen(onOpenChat: (String) -> Unit) {
 
 data class ChatMessage(val fromUser: Boolean, val text: String = "", val image: Uri? = null, val isProcessing: Boolean = false)
 
+// Function to get image name from URI
+private fun getImageName(context: android.content.Context, uri: Uri): String {
+    var name = "Unknown Image"
+    val contentResolver: ContentResolver = context.contentResolver
+    val cursor: Cursor? = contentResolver.query(uri, null, null, null, null)
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex != -1) {
+                name = it.getString(nameIndex) ?: "Unknown Image"
+            }
+        }
+    }
+    return name
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
@@ -66,9 +91,30 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
+    val context = LocalContext.current
+    
+    // State for image upload functionality
+    val selectedImage = remember { mutableStateOf<Uri?>(null) }
+    val isImageUploading = remember { mutableStateOf(false) }
+    val imageName = remember { mutableStateOf<String?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) messages.add(ChatMessage(true, image = uri))
+        if (uri != null) {
+            selectedImage.value = uri
+            isImageUploading.value = true
+            
+            // Get image name for preview
+            val name = getImageName(context, uri)
+            imageName.value = name
+            
+            // Simulate image processing delay and add to messages
+            scope.launch {
+                kotlinx.coroutines.delay(1000) // Simulate processing time
+                messages.add(ChatMessage(true, image = uri))
+                isImageUploading.value = false
+                // Keep the preview visible - don't clear selectedImage and imageName
+            }
+        }
     }
 
     Scaffold(
@@ -95,54 +141,188 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                     Spacer(Modifier.height(8.dp))
                 }
             }
+            
+            // Image preview area
+            if (selectedImage.value != null && imageName.value != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(selectedImage.value),
+                            contentDescription = "Selected image",
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = imageName.value!!,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            if (isImageUploading.value) {
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = "Uploading...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = "Uploaded",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Uploaded successfully",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Close button to clear the preview
+                        IconButton(
+                            onClick = {
+                                selectedImage.value = null
+                                imageName.value = null
+                                isImageUploading.value = false
+                            }
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Clear preview",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = {
-                    imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }) { Icon(Icons.Filled.Image, contentDescription = null) }
+                // Image upload button with preview and loading state
+                Box {
+                    IconButton(
+                        onClick = {
+                            if (!isImageUploading.value) {
+                                imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
+                        }
+                    ) {
+                        when {
+                            isImageUploading.value -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            selectedImage.value != null -> {
+                                Image(
+                                    painter = rememberAsyncImagePainter(selectedImage.value),
+                                    contentDescription = "Selected image",
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            else -> {
+                                Icon(Icons.Filled.Image, contentDescription = "Upload image")
+                            }
+                        }
+                    }
+                    
+                    // Show check mark when image is being processed
+                    if (isImageUploading.value) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = "Processing",
+                            modifier = Modifier
+                                .size(12.dp)
+                                .offset(x = 16.dp, y = 16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                
                 TextField(value = input.value, onValueChange = { input.value = it }, modifier = Modifier.weight(1f))
-                Button(onClick = {
-                    if (input.value.isBlank()) return@Button
-                    val userInput = input.value // Store the input before clearing
-                    val userMessage = ChatMessage(true, text = userInput)
-                    messages.add(userMessage)
-                    
-                    val processingMessage = ChatMessage(false, text = "", isProcessing = true)
-                    messages.add(processingMessage)
-                    
-                    input.value = "" // Clear input immediately after storing
-                    
-                    scope.launch {
-                        try {
-                            val result = llm.parseFromText(userInput) // Use stored input
-                            messages.remove(processingMessage)
-                            
-                            when (result) {
-                                is com.example.whitelabel.data.LlmResult.Success -> {
-                                    val jsonText = result.normalizedSchedule
-                                    try {
-                                        // Parse the JSON response into ParsedPrescription
-                                        val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
-                                        parsedPrescription.value = prescription
-                                        
-                                        // Format and display the parsed prescription
-                                        val formattedJson = gson.toJson(prescription)
-                                        messages.add(ChatMessage(false, text = "Prescription parsed successfully:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
-                                    } catch (e: Exception) {
-                                        // If parsing fails, show the raw response
-                                        messages.add(ChatMessage(false, text = "Prescription parsed (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                Button(
+                    enabled = !isImageUploading.value && (input.value.isNotBlank() || selectedImage.value != null),
+                    onClick = {
+                        // Allow sending if there's text OR if there's a selected image
+                        if ((input.value.isBlank() && selectedImage.value == null) || isImageUploading.value) return@Button
+                        
+                        val userInput = input.value // Store the input before clearing
+                        val userMessage = ChatMessage(true, text = userInput, image = selectedImage.value)
+                        messages.add(userMessage)
+                        
+                        // Clear the image preview after sending
+                        selectedImage.value = null
+                        imageName.value = null
+                        
+                        val processingMessage = ChatMessage(false, text = "", isProcessing = true)
+                        messages.add(processingMessage)
+                        
+                        input.value = "" // Clear input immediately after storing
+                        
+                        scope.launch {
+                            try {
+                                val result = llm.parseFromText(userInput) // Use stored input
+                                messages.remove(processingMessage)
+                                
+                                when (result) {
+                                    is com.example.whitelabel.data.LlmResult.Success -> {
+                                        val jsonText = result.normalizedSchedule
+                                        try {
+                                            // Parse the JSON response into ParsedPrescription
+                                            val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
+                                            parsedPrescription.value = prescription
+                                            
+                                            // Format and display the parsed prescription
+                                            val formattedJson = gson.toJson(prescription)
+                                            messages.add(ChatMessage(false, text = "Prescription parsed successfully:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
+                                        } catch (e: Exception) {
+                                            // If parsing fails, show the raw response
+                                            messages.add(ChatMessage(false, text = "Prescription parsed (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                            parsedPrescription.value = null
+                                        }
+                                    }
+                                    is com.example.whitelabel.data.LlmResult.Error -> {
+                                        messages.add(ChatMessage(false, text = "Error: ${result.message}"))
                                         parsedPrescription.value = null
                                     }
                                 }
-                                is com.example.whitelabel.data.LlmResult.Error -> {
-                                    messages.add(ChatMessage(false, text = "Error: ${result.message}"))
-                                    parsedPrescription.value = null
-                                }
+                            } catch (e: Exception) {
+                                messages.remove(processingMessage)
+                                messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
                             }
-                        } catch (e: Exception) {
-                            messages.remove(processingMessage)
-                            messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
                         }
-                    }
                 }) { Text("Send") }
             }
             Button(onClick = { onOpenSchedule(parsedPrescription.value) }, modifier = Modifier.padding(12.dp).fillMaxWidth()) { Text("Set Timing & Approve") }
