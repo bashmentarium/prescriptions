@@ -1,5 +1,6 @@
 package com.example.whitelabel.ui.screen
 
+import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.net.Uri
@@ -33,10 +34,12 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
 import com.example.whitelabel.data.ParsedPrescription
+import com.example.whitelabel.data.CalendarSync
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +85,130 @@ private fun getImageName(context: android.content.Context, uri: Uri): String {
     return name
 }
 
+// Function to create calendar events directly from prescription
+private fun createCalendarEventsFromPrescription(
+    context: android.content.Context,
+    prescription: ParsedPrescription
+): Int {
+    val cal = Calendar.getInstance()
+    var created = 0
+    
+    repeat(prescription.schedule.duration_days) { dayIndex ->
+        val dayCal = (cal.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_YEAR, dayIndex)
+        }
+        
+        // Create multiple events per day based on prescription
+        val timesPerDay = prescription.schedule.times_per_day
+        val startTime = prescription.schedule.start_time_minutes
+        val endTime = prescription.schedule.end_time_minutes
+        
+        // Calculate time slots
+        val timeSlots = if (timesPerDay <= 1) {
+            listOf(startTime)
+        } else {
+            val timeRange = endTime - startTime
+            val interval = timeRange / (timesPerDay - 1)
+            (0 until timesPerDay).map { index ->
+                startTime + (interval * index)
+            }
+        }
+        
+        timeSlots.forEach { timeInMinutes ->
+            val eventCal = (dayCal.clone() as Calendar).apply {
+                set(Calendar.HOUR_OF_DAY, timeInMinutes / 60)
+                set(Calendar.MINUTE, timeInMinutes % 60)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            
+            val start = eventCal.timeInMillis
+            val end = start + 30 * 60 * 1000 // 30 minutes duration
+            
+            // Create event title and description from prescription
+            val title = buildEventTitle(prescription)
+            val description = buildEventDescription(prescription)
+            
+            CalendarSync.insertEvent(
+                context = context,
+                title = title,
+                description = description,
+                startMillis = start,
+                endMillis = end
+            )?.let { created++ }
+        }
+    }
+    
+    return created
+}
+
+private fun buildEventTitle(prescription: ParsedPrescription): String {
+    val medications = prescription.medications
+    return when {
+        medications.isEmpty() -> "Medication"
+        medications.size == 1 -> medications.first().name
+        medications.size <= 3 -> medications.joinToString(", ") { it.name }
+        else -> "${medications.first().name} + ${medications.size - 1} more"
+    }
+}
+
+private fun buildEventDescription(prescription: ParsedPrescription): String {
+    val medications = prescription.medications.joinToString("\n") { med ->
+        "• ${med.name}: ${med.dosage} - ${med.frequency}"
+    }
+    
+    val schedule = prescription.schedule
+    val scheduleInfo = buildString {
+        append("Schedule: ${schedule.times_per_day} times per day")
+        if (schedule.with_food) {
+            append(" (with food)")
+        }
+        if (schedule.preferred_times.isNotEmpty()) {
+            append("\nPreferred times: ${schedule.preferred_times.joinToString(", ")}")
+        }
+    }
+    
+    return "$medications\n\n$scheduleInfo"
+}
+
+private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceType: String): String {
+    val medications = prescription.medications.joinToString("\n") { med ->
+        "• ${med.name}: ${med.dosage} - ${med.frequency}"
+    }
+    
+    val schedule = prescription.schedule
+    val startTime = formatMinutesToTime(schedule.start_time_minutes)
+    val endTime = formatMinutesToTime(schedule.end_time_minutes)
+    
+    val scheduleInfo = buildString {
+        append("📅 Schedule: ${schedule.times_per_day} times per day for ${schedule.duration_days} days")
+        append("\n⏰ Timing: Between $startTime and $endTime")
+        if (schedule.with_food) {
+            append("\n🍽️ Take with food")
+        }
+        if (schedule.preferred_times.isNotEmpty()) {
+            append("\n⭐ Preferred times: ${schedule.preferred_times.joinToString(", ")}")
+        }
+    }
+    
+    return "✅ Prescription parsed successfully from $sourceType!\n\n" +
+           "💊 Medications:\n$medications\n\n" +
+           "$scheduleInfo\n\n" +
+           "🎯 Ready to create calendar events! Tap 'Set Timing & Approve' to add to your calendar."
+}
+
+private fun formatMinutesToTime(minutes: Int): String {
+    val hours = minutes / 60
+    val mins = minutes % 60
+    val period = if (hours >= 12) "PM" else "AM"
+    val displayHours = when {
+        hours == 0 -> 12
+        hours > 12 -> hours - 12
+        else -> hours
+    }
+    return String.format("%d:%02d %s", displayHours, mins, period)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
@@ -92,6 +219,15 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
+    
+    // Calendar permissions
+    val hasCalendarPermission = remember { mutableStateOf(false) }
+    val requester = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        hasCalendarPermission.value = result[Manifest.permission.READ_CALENDAR] == true &&
+            result[Manifest.permission.WRITE_CALENDAR] == true
+    }
     
     // State for image upload functionality
     val selectedImage = remember { mutableStateOf<Uri?>(null) }
@@ -310,10 +446,10 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                             val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
                                             parsedPrescription.value = prescription
                                             
-                                            // Format and display the parsed prescription
-                                            val formattedJson = gson.toJson(prescription)
+                                            // Create human-readable message
                                             val sourceType = if (userMessage.image != null) "image" else "text"
-                                            messages.add(ChatMessage(false, text = "Prescription parsed successfully from $sourceType:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
+                                            val humanReadableMessage = buildHumanReadableMessage(prescription, sourceType)
+                                            messages.add(ChatMessage(false, text = humanReadableMessage))
                                         } catch (e: Exception) {
                                             // If parsing fails, show the raw response
                                             val sourceType = if (userMessage.image != null) "image" else "text"
@@ -333,7 +469,31 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                         }
                 }) { Text("Send") }
             }
-            Button(onClick = { onOpenSchedule(parsedPrescription.value) }, modifier = Modifier.padding(12.dp).fillMaxWidth()) { Text("Set Timing & Approve") }
+            Button(
+                onClick = { 
+                    parsedPrescription.value?.let { prescription ->
+                        if (hasCalendarPermission.value) {
+                            scope.launch {
+                                try {
+                                    val created = createCalendarEventsFromPrescription(context, prescription)
+                                    Toast.makeText(context, "$created calendar events created successfully!", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } else {
+                            // Request calendar permissions
+                            requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
+                        }
+                    } ?: run {
+                        Toast.makeText(context, "No prescription data available. Please process a prescription first.", Toast.LENGTH_LONG).show()
+                    }
+                }, 
+                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                enabled = parsedPrescription.value != null
+            ) { 
+                Text("Set Timing & Approve") 
+            }
         }
     }
 }

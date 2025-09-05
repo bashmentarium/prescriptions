@@ -29,7 +29,9 @@ data class ParsedSchedule(
     val times_per_day: Int,
     val preferred_times: List<String>,
     val with_food: Boolean,
-    val duration_days: Int
+    val duration_days: Int,
+    val start_time_minutes: Int = 480, // Default 8:00 AM
+    val end_time_minutes: Int = 1200   // Default 8:00 PM
 )
 
 data class ParsedPrescription(

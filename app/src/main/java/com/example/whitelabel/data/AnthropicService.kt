@@ -86,9 +86,20 @@ class RealAnthropicService(private val context: Context) : LlmService {
                             "times_per_day": number,
                             "preferred_times": ["morning", "afternoon", "evening"],
                             "with_food": boolean,
-                            "duration_days": number
+                            "duration_days": number,
+                            "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
+                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM)
                         }
                     }
+                    
+                    For timing:
+                    - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values
+                    - If "morning" is mentioned, use 480 (8:00 AM) as start_time_minutes
+                    - If "afternoon" is mentioned, use 840 (2:00 PM) as start_time_minutes  
+                    - If "evening" is mentioned, use 1200 (8:00 PM) as start_time_minutes
+                    - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
+                    - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
+                    - For multiple daily doses, spread them evenly between start and end times
                     
                     Prescription text: $text
                     
@@ -172,9 +183,20 @@ class RealAnthropicService(private val context: Context) : LlmService {
                             "times_per_day": number,
                             "preferred_times": ["morning", "afternoon", "evening"],
                             "with_food": boolean,
-                            "duration_days": number
+                            "duration_days": number,
+                            "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
+                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM)
                         }
                     }
+                    
+                    For timing:
+                    - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values
+                    - If "morning" is mentioned, use 480 (8:00 AM) as start_time_minutes
+                    - If "afternoon" is mentioned, use 840 (2:00 PM) as start_time_minutes  
+                    - If "evening" is mentioned, use 1200 (8:00 PM) as start_time_minutes
+                    - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
+                    - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
+                    - For multiple daily doses, spread them evenly between start and end times
                     
                     Respond with only the JSON, no additional text.
                 """.trimIndent()
