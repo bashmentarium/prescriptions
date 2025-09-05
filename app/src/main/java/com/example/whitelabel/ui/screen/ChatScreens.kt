@@ -7,6 +7,16 @@ import android.net.Uri
 import android.content.ContentResolver
 import android.database.Cursor
 import android.provider.OpenableColumns
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Environment
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +34,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -38,6 +49,9 @@ import com.example.whitelabel.data.ParsedPrescription
 import com.example.whitelabel.data.CalendarSync
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
+import com.example.whitelabel.data.CalendarInfo
+import com.example.whitelabel.data.EventInfo
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
@@ -97,6 +111,13 @@ private fun getImageName(context: android.content.Context, uri: Uri): String {
     return name
 }
 
+// Function to create a temporary file for camera photos
+private fun createImageFile(context: android.content.Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    return File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir)
+}
+
 // Function to create calendar events directly from prescription using user settings
 private fun createCalendarEventsFromPrescription(
     context: android.content.Context,
@@ -146,14 +167,48 @@ private fun createCalendarEventsFromPrescription(
             val title = buildEventTitle(prescription)
             val description = buildEventDescription(prescription, userSettings)
             
+            // Get available calendars and use the first one if default doesn't work
+            val availableCalendars = CalendarSync.getAvailableCalendars(context)
+            val calendarId = if (availableCalendars.isNotEmpty()) {
+                // Try to find primary calendar first, otherwise use the first available
+                availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
+            } else {
+                userSettings.defaultCalendarId
+            }
+            
+            Log.d("ChatScreens", "Using calendar ID: $calendarId")
+            
             CalendarSync.insertEvent(
                 context = context,
                 title = title,
                 description = description,
                 startMillis = start,
                 endMillis = end,
-                calendarId = userSettings.defaultCalendarId
-            )?.let { created++ }
+                calendarId = calendarId
+            )?.let { 
+                created++
+                Log.d("ChatScreens", "Successfully created event $created")
+            } ?: run {
+                Log.e("ChatScreens", "Failed to create event at time $timeInMinutes")
+            }
+        }
+    }
+    
+    // Verify events were actually created
+    if (created > 0) {
+        val availableCalendars = CalendarSync.getAvailableCalendars(context)
+        val calendarId = if (availableCalendars.isNotEmpty()) {
+            availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
+        } else {
+            userSettings.defaultCalendarId
+        }
+        
+        val events = CalendarSync.getEventsInCalendar(context, calendarId)
+        Log.d("ChatScreens", "Verification: Found ${events.size} events in calendar $calendarId")
+        
+        // Log recent events to help debug
+        events.take(5).forEach { event ->
+            Log.d("ChatScreens", "Recent event: ${event.title} at ${event.startTime}")
         }
     }
     
@@ -257,10 +312,19 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
             result[Manifest.permission.WRITE_CALENDAR] == true
     }
     
+    // Camera permissions
+    val hasCameraPermission = remember { mutableStateOf(false) }
+    val cameraPermissionRequester = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission.value = isGranted
+    }
+    
     // State for image upload functionality
     val selectedImage = remember { mutableStateOf<Uri?>(null) }
     val isImageUploading = remember { mutableStateOf(false) }
     val imageName = remember { mutableStateOf<String?>(null) }
+    val cameraImageUri = remember { mutableStateOf<Uri?>(null) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -277,6 +341,21 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                 messages.add(ChatMessage(true, image = uri))
                 isImageUploading.value = false
                 // Keep the preview visible - don't clear selectedImage and imageName
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && cameraImageUri.value != null) {
+            selectedImage.value = cameraImageUri.value
+            isImageUploading.value = true
+            imageName.value = "Camera Photo"
+            
+            // Simulate image processing delay and add to messages
+            scope.launch {
+                kotlinx.coroutines.delay(1000) // Simulate processing time
+                messages.add(ChatMessage(true, image = cameraImageUri.value))
+                isImageUploading.value = false
             }
         }
     }
@@ -390,48 +469,73 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
             }
             
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Image upload button with preview and loading state
-                Box {
-                    IconButton(
-                        onClick = {
-                            if (!isImageUploading.value) {
-                                imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                // Image upload buttons with preview and loading state
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Gallery button
+                    Box {
+                        IconButton(
+                            onClick = {
+                                if (!isImageUploading.value) {
+                                    imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                }
+                            }
+                        ) {
+                            when {
+                                isImageUploading.value -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                                selectedImage.value != null -> {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(selectedImage.value),
+                                        contentDescription = "Selected image",
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                else -> {
+                                    Icon(Icons.Filled.Image, contentDescription = "Upload from gallery")
+                                }
                             }
                         }
-                    ) {
-                        when {
-                            isImageUploading.value -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            }
-                            selectedImage.value != null -> {
-                                Image(
-                                    painter = rememberAsyncImagePainter(selectedImage.value),
-                                    contentDescription = "Selected image",
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            else -> {
-                                Icon(Icons.Filled.Image, contentDescription = "Upload image")
-                            }
+                        
+                        // Show check mark when image is being processed
+                        if (isImageUploading.value) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = "Processing",
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .offset(x = 16.dp, y = 16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                     
-                    // Show check mark when image is being processed
-                    if (isImageUploading.value) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = "Processing",
-                            modifier = Modifier
-                                .size(12.dp)
-                                .offset(x = 16.dp, y = 16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    // Camera button
+                    IconButton(
+                        onClick = {
+                            if (!isImageUploading.value) {
+                                if (hasCameraPermission.value) {
+                                    val photoFile = createImageFile(context)
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        photoFile
+                                    )
+                                    cameraImageUri.value = uri
+                                    cameraLauncher.launch(uri)
+                                } else {
+                                    cameraPermissionRequester.launch(Manifest.permission.CAMERA)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Take photo")
                     }
                 }
                 
@@ -505,7 +609,17 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                 try {
                                     val userSettings = settingsManager.getSettings()
                                     val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
-                                    Toast.makeText(context, "$created calendar events created successfully!", Toast.LENGTH_LONG).show()
+                                    
+                                    // Get calendar info for better feedback
+                                    val availableCalendars = CalendarSync.getAvailableCalendars(context)
+                                    val calendarName = if (availableCalendars.isNotEmpty()) {
+                                        val calendarId = availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
+                                        availableCalendars.find { it.id == calendarId }?.name ?: "Unknown Calendar"
+                                    } else {
+                                        "Default Calendar"
+                                    }
+                                    
+                                    Toast.makeText(context, "$created events created in '$calendarName'", Toast.LENGTH_LONG).show()
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
                                 }

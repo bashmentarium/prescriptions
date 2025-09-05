@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +17,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
+import com.example.whitelabel.data.CalendarSync
+import android.widget.Toast
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -258,6 +261,65 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Text("• Event duration: ${settings.eventDurationMinutes} minutes")
                     Text("• With food: ${if (settings.withFoodDefault) "Yes" else "No"}")
                     Text("• Preferred times: ${settings.preferredTimes.joinToString(", ")}")
+                }
+            }
+            
+            // Debug Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "🐛 Debug Calendar Access",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Button(
+                        onClick = {
+                            val calendars = CalendarSync.getAvailableCalendars(context)
+                            if (calendars.isNotEmpty()) {
+                                val calendarList = calendars.joinToString("\n") { 
+                                    "• ${it.name} (ID: ${it.id}, Primary: ${it.isPrimary})" 
+                                }
+                                Toast.makeText(context, "Found ${calendars.size} calendars:\n$calendarList", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "No calendars found! Check permissions.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Filled.BugReport, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Test Calendar Access")
+                    }
+                    
+                    Button(
+                        onClick = {
+                            val calendars = CalendarSync.getAvailableCalendars(context)
+                            if (calendars.isNotEmpty()) {
+                                val calendarId = calendars.find { it.isPrimary }?.id ?: calendars.first().id
+                                val events = CalendarSync.getEventsInCalendar(context, calendarId)
+                                val calendarName = calendars.find { it.id == calendarId }?.name ?: "Unknown"
+                                
+                                if (events.isNotEmpty()) {
+                                    val eventList = events.take(5).joinToString("\n") { 
+                                        "• ${it.title} (${java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.startTime))})" 
+                                    }
+                                    Toast.makeText(context, "Found ${events.size} events in '$calendarName':\n$eventList", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "No events found in '$calendarName'", Toast.LENGTH_LONG).show()
+                                }
+                            } else {
+                                Toast.makeText(context, "No calendars available", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Filled.BugReport, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Check Events")
+                    }
                 }
             }
         }

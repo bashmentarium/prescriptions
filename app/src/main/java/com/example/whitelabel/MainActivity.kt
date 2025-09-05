@@ -20,6 +20,8 @@ import androidx.navigation.navArgument
 import com.example.whitelabel.data.CalendarSync
 import com.example.whitelabel.data.ParsedPrescription
 import com.example.whitelabel.data.SettingsManager
+import com.example.whitelabel.data.CalendarInfo
+import android.util.Log
 import com.example.whitelabel.ui.screen.ChatDetailScreen
 import com.example.whitelabel.ui.screen.ChatListScreen
 import com.example.whitelabel.ui.screen.ScheduleBuilderScreen
@@ -154,14 +156,30 @@ class MainActivity : ComponentActivity() {
                                 val title = buildEventTitle(prescription)
                                 val description = buildDescription(prescription, userSettings)
                                 
+                                // Get available calendars and use the first one if default doesn't work
+                                val availableCalendars = CalendarSync.getAvailableCalendars(this)
+                                val calendarId = if (availableCalendars.isNotEmpty()) {
+                                    // Try to find primary calendar first, otherwise use the first available
+                                    availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
+                                } else {
+                                    userSettings.defaultCalendarId
+                                }
+                                
+                                Log.d("MainActivity", "Using calendar ID: $calendarId")
+                                
                                 CalendarSync.insertEvent(
                                     context = this,
                                     title = title,
                                     description = description,
                                     startMillis = start,
                                     endMillis = end,
-                                    calendarId = userSettings.defaultCalendarId
-                                )?.let { created++ }
+                                    calendarId = calendarId
+                                )?.let { 
+                                    created++
+                                    Log.d("MainActivity", "Successfully created event $created")
+                                } ?: run {
+                                    Log.e("MainActivity", "Failed to create event at time $timeInMinutes")
+                                }
                             }
                         }
                         Toast.makeText(this, "$created events added to Calendar", Toast.LENGTH_LONG).show()
