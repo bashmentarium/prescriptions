@@ -87,11 +87,11 @@ private fun getImageName(context: android.content.Context, uri: Uri): String {
 fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
     val input = remember { mutableStateOf("") }
-    val llm: LlmService = remember { RealAnthropicService() }
+    val context = LocalContext.current
+    val llm: LlmService = remember { RealAnthropicService(context) }
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
-    val context = LocalContext.current
     
     // State for image upload functionality
     val selectedImage = remember { mutableStateOf<Uri?>(null) }
@@ -293,7 +293,13 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                         
                         scope.launch {
                             try {
-                                val result = llm.parseFromText(userInput) // Use stored input
+                                val result = if (userMessage.image != null) {
+                                    // Process image
+                                    llm.parseFromImage(userMessage.image)
+                                } else {
+                                    // Process text
+                                    llm.parseFromText(userInput)
+                                }
                                 messages.remove(processingMessage)
                                 
                                 when (result) {
@@ -306,10 +312,12 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                             
                                             // Format and display the parsed prescription
                                             val formattedJson = gson.toJson(prescription)
-                                            messages.add(ChatMessage(false, text = "Prescription parsed successfully:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
+                                            val sourceType = if (userMessage.image != null) "image" else "text"
+                                            messages.add(ChatMessage(false, text = "Prescription parsed successfully from $sourceType:\n\n$formattedJson\n\nTap 'Set Timing & Approve' to continue."))
                                         } catch (e: Exception) {
                                             // If parsing fails, show the raw response
-                                            messages.add(ChatMessage(false, text = "Prescription parsed (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                            val sourceType = if (userMessage.image != null) "image" else "text"
+                                            messages.add(ChatMessage(false, text = "Prescription parsed from $sourceType (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
                                             parsedPrescription.value = null
                                         }
                                     }
