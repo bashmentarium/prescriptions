@@ -56,3 +56,13 @@ class FakeLlmService : LlmService {
     override suspend fun parseFromImage(uri: android.net.Uri): LlmResult =
         LlmResult.Success("Parsed schedule from image: $uri")
 }
+
+data class UserSettings(
+    val earliestTimeMinutes: Int = 480, // Default 8:00 AM
+    val latestTimeMinutes: Int = 1200,  // Default 8:00 PM
+    val eventDurationMinutes: Int = 30, // Default 30 minutes
+    val defaultCalendarId: Long = 1L,   // Default calendar ID
+    val reminderMinutes: Int = 15,      // Default 15 minutes before
+    val withFoodDefault: Boolean = false, // Default not with food
+    val preferredTimes: List<String> = listOf("morning", "evening") // Default preferred times
+)

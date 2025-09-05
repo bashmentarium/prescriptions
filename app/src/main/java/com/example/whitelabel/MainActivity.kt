@@ -19,9 +19,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.whitelabel.data.CalendarSync
 import com.example.whitelabel.data.ParsedPrescription
+import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.ui.screen.ChatDetailScreen
 import com.example.whitelabel.ui.screen.ChatListScreen
 import com.example.whitelabel.ui.screen.ScheduleBuilderScreen
+import com.example.whitelabel.ui.screen.SettingsScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
 import java.util.Calendar
 
@@ -86,7 +88,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    private fun buildDescription(prescription: ParsedPrescription?): String {
+    private fun buildDescription(prescription: ParsedPrescription?, userSettings: com.example.whitelabel.data.UserSettings): String {
         if (prescription == null) {
             return "Take prescribed medications"
         }
@@ -98,11 +100,20 @@ class MainActivity : ComponentActivity() {
         val schedule = prescription.schedule
         val scheduleInfo = buildString {
             append("Schedule: ${schedule.times_per_day} times per day")
-            if (schedule.with_food) {
+            
+            // Use user's default with food setting if prescription doesn't specify
+            val withFood = schedule.with_food || (userSettings.withFoodDefault && !schedule.with_food)
+            if (withFood) {
                 append(" (with food)")
             }
+            
             if (schedule.preferred_times.isNotEmpty()) {
                 append("\nPreferred times: ${schedule.preferred_times.joinToString(", ")}")
+            }
+            
+            // Add reminder info
+            if (userSettings.reminderMinutes > 0) {
+                append("\nReminder: ${userSettings.reminderMinutes} minutes before")
             }
         }
         
@@ -114,6 +125,8 @@ class MainActivity : ComponentActivity() {
             WhitelabelTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     AppNav(onInsertEvents = { startMillis, earliest, latest, days, prescription ->
+                        val settingsManager = SettingsManager(this)
+                        val userSettings = settingsManager.getSettings()
                         val cal = Calendar.getInstance().apply { timeInMillis = startMillis }
                         var created = 0
                         
@@ -135,18 +148,19 @@ class MainActivity : ComponentActivity() {
                                 }
                                 
                                 val start = eventCal.timeInMillis
-                                val end = start + 30 * 60 * 1000 // 30 minutes duration
+                                val end = start + userSettings.eventDurationMinutes * 60 * 1000 // Use user's preferred duration
                                 
                                 // Create event title and description from prescription
                                 val title = buildEventTitle(prescription)
-                                val description = buildDescription(prescription)
+                                val description = buildDescription(prescription, userSettings)
                                 
                                 CalendarSync.insertEvent(
                                     context = this,
                                     title = title,
                                     description = description,
                                     startMillis = start,
-                                    endMillis = end
+                                    endMillis = end,
+                                    calendarId = userSettings.defaultCalendarId
                                 )?.let { created++ }
                             }
                         }
@@ -165,7 +179,10 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
     
     NavHost(navController = navController, startDestination = "chats") {
         composable("chats") {
-            ChatListScreen(onOpenChat = { id -> navController.navigate("chat/$id") })
+            ChatListScreen(
+                onOpenChat = { id -> navController.navigate("chat/$id") },
+                onOpenSettings = { navController.navigate("settings") }
+            )
         }
         composable("chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
             ChatDetailScreen(
@@ -195,6 +212,9 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
                 },
                 parsedPrescription = parsedPrescription.value
             )
+        }
+        composable("settings") {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -35,6 +36,8 @@ import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
 import com.example.whitelabel.data.ParsedPrescription
 import com.example.whitelabel.data.CalendarSync
+import com.example.whitelabel.data.SettingsManager
+import com.example.whitelabel.data.UserSettings
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
@@ -43,10 +46,19 @@ import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatListScreen(onOpenChat: (String) -> Unit) {
+fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit) {
     val items = remember { mutableStateListOf("Course 1", "Course 2") }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Treatment Courses") }) },
+        topBar = { 
+            TopAppBar(
+                title = { Text("Treatment Courses") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = {
                 val new = "Course ${items.size + 1}"
@@ -85,10 +97,11 @@ private fun getImageName(context: android.content.Context, uri: Uri): String {
     return name
 }
 
-// Function to create calendar events directly from prescription
+// Function to create calendar events directly from prescription using user settings
 private fun createCalendarEventsFromPrescription(
     context: android.content.Context,
-    prescription: ParsedPrescription
+    prescription: ParsedPrescription,
+    userSettings: UserSettings
 ): Int {
     val cal = Calendar.getInstance()
     var created = 0
@@ -98,10 +111,14 @@ private fun createCalendarEventsFromPrescription(
             add(Calendar.DAY_OF_YEAR, dayIndex)
         }
         
-        // Create multiple events per day based on prescription
+        // Create multiple events per day based on prescription and user settings
         val timesPerDay = prescription.schedule.times_per_day
-        val startTime = prescription.schedule.start_time_minutes
-        val endTime = prescription.schedule.end_time_minutes
+        val prescriptionStartTime = prescription.schedule.start_time_minutes
+        val prescriptionEndTime = prescription.schedule.end_time_minutes
+        
+        // Use user settings as bounds, but respect prescription timing if it's within bounds
+        val startTime = maxOf(prescriptionStartTime, userSettings.earliestTimeMinutes)
+        val endTime = minOf(prescriptionEndTime, userSettings.latestTimeMinutes)
         
         // Calculate time slots
         val timeSlots = if (timesPerDay <= 1) {
@@ -123,18 +140,19 @@ private fun createCalendarEventsFromPrescription(
             }
             
             val start = eventCal.timeInMillis
-            val end = start + 30 * 60 * 1000 // 30 minutes duration
+            val end = start + userSettings.eventDurationMinutes * 60 * 1000 // Use user's preferred duration
             
             // Create event title and description from prescription
             val title = buildEventTitle(prescription)
-            val description = buildEventDescription(prescription)
+            val description = buildEventDescription(prescription, userSettings)
             
             CalendarSync.insertEvent(
                 context = context,
                 title = title,
                 description = description,
                 startMillis = start,
-                endMillis = end
+                endMillis = end,
+                calendarId = userSettings.defaultCalendarId
             )?.let { created++ }
         }
     }
@@ -152,7 +170,7 @@ private fun buildEventTitle(prescription: ParsedPrescription): String {
     }
 }
 
-private fun buildEventDescription(prescription: ParsedPrescription): String {
+private fun buildEventDescription(prescription: ParsedPrescription, userSettings: UserSettings): String {
     val medications = prescription.medications.joinToString("\n") { med ->
         "• ${med.name}: ${med.dosage} - ${med.frequency}"
     }
@@ -160,11 +178,20 @@ private fun buildEventDescription(prescription: ParsedPrescription): String {
     val schedule = prescription.schedule
     val scheduleInfo = buildString {
         append("Schedule: ${schedule.times_per_day} times per day")
-        if (schedule.with_food) {
+        
+        // Use user's default with food setting if prescription doesn't specify
+        val withFood = schedule.with_food || (userSettings.withFoodDefault && !schedule.with_food)
+        if (withFood) {
             append(" (with food)")
         }
+        
         if (schedule.preferred_times.isNotEmpty()) {
             append("\nPreferred times: ${schedule.preferred_times.joinToString(", ")}")
+        }
+        
+        // Add reminder info
+        if (userSettings.reminderMinutes > 0) {
+            append("\nReminder: ${userSettings.reminderMinutes} minutes before")
         }
     }
     
@@ -219,6 +246,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
+    val settingsManager = remember { SettingsManager(context) }
     
     // Calendar permissions
     val hasCalendarPermission = remember { mutableStateOf(false) }
@@ -475,7 +503,8 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                         if (hasCalendarPermission.value) {
                             scope.launch {
                                 try {
-                                    val created = createCalendarEventsFromPrescription(context, prescription)
+                                    val userSettings = settingsManager.getSettings()
+                                    val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
                                     Toast.makeText(context, "$created calendar events created successfully!", Toast.LENGTH_LONG).show()
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
