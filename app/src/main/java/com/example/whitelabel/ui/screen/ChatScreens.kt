@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -35,13 +37,23 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.sp
+import com.example.whitelabel.ui.theme.*
 import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
@@ -58,36 +70,166 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import android.widget.Toast
 
+data class CourseItem(val name: String, val prescriptionPreview: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit) {
-    val items = remember { mutableStateListOf("Course 1", "Course 2") }
-    Scaffold(
-        topBar = { 
-            TopAppBar(
-                title = { Text("Treatment Courses") },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+    val items = remember { 
+        mutableStateListOf(
+            CourseItem("Course 1", "Amoxicillin 500mg - Take 3 times daily with food for 7 days. Complete the full course even if you feel better."),
+            CourseItem("Course 2", "Ibuprofen 400mg - Take as needed for pain, maximum 3 times per day. Take with food to reduce stomach irritation.")
+        ) 
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        Scaffold(
+            topBar = { 
+                TopAppBar(
+                    title = { 
+                        Text(
+                            "My Treatment Courses",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = Color.Black
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    actions = {
+                        IconButton(
+                            onClick = onOpenSettings
+                        ) {
+                            Icon(
+                                Icons.Filled.Settings, 
+                                contentDescription = "Settings",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {
+                        val newCourse = CourseItem("Course ${items.size + 1}", "New prescription - details will be added after processing")
+                        items.add(newCourse)
+                        onOpenChat(newCourse.name)
+                    },
+                    containerColor = Color.Transparent,
+                    contentColor = Color.Black,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp,
+                        hoveredElevation = 0.dp,
+                        focusedElevation = 0.dp
+                    ),
+                    modifier = Modifier
+                        .size(56.dp)
+                        .border(
+                            width = 1.dp,
+                            color = BorderGray,
+                            shape = CircleShape
+                        )
+                ) { 
+                    Icon(
+                        Icons.Filled.Add, 
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    ) 
+                }
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(items) { courseItem ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(75.dp)
+                            .clickable { onOpenChat(courseItem.name) }
+                            .border(
+                                width = 1.dp,
+                                color = BorderGray,
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.Transparent
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .background(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                // Treatment course icon - simple black and white
+                                Icon(
+                                    Icons.Filled.Medication,
+                                    contentDescription = "Treatment",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                
+                                Column(
+                                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = courseItem.name,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                        ),
+                                        color = Color.Black
+                                    )
+                                    Text(
+                                        text = courseItem.prescriptionPreview,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                                
+                                // Arrow without circle background
+                                Icon(
+                                    Icons.Filled.ArrowBack,
+                                    contentDescription = "Open",
+                                    tint = Color.Black,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .rotate(180f)
+                                )
+                            }
+                        }
                     }
                 }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                val new = "Course ${items.size + 1}"
-                items.add(new)
-                onOpenChat(new)
-            }) { Icon(Icons.Filled.Add, contentDescription = null) }
-        }
-    ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-            items(items) { title ->
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenChat(title) }.padding(16.dp)
-                )
             }
         }
     }
@@ -279,7 +421,7 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
            "🎯 Ready to create calendar events! Tap 'Set Timing & Approve' to add to your calendar."
 }
 
-private fun formatMinutesToTime(minutes: Int): String {
+fun formatMinutesToTime(minutes: Int): String {
     val hours = minutes / 60
     val mins = minutes % 60
     val period = if (hours >= 12) "PM" else "AM"
@@ -360,28 +502,186 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
         }
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Chat") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }) }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
-                items(messages) { m ->
-                    if (m.image != null) {
-                        Image(
-                            painter = rememberAsyncImagePainter(m.image),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxWidth(),
-                            contentScale = ContentScale.FillWidth
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        CreamWhite,
+                        LightCream
+                    )
+                )
+            )
+    ) {
+        Scaffold(
+            topBar = { 
+                TopAppBar(
+                    title = { 
+                        Text(
+                            "💬 Prescription Chat",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = DeepNavy
                         )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    navigationIcon = { 
+                        IconButton(
+                            onClick = onBack
+                        ) { 
+                            Icon(
+                                Icons.Filled.ArrowBack, 
+                                contentDescription = "Back",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            ) 
+                        } 
                     }
-                    if (m.text.isNotBlank()) {
-                        if (m.isProcessing) {
-                            Text("Processing prescription...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else {
-                            Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(messages) { m ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (m.fromUser) Arrangement.End else Arrangement.Start
+                    ) {
+                        if (!m.fromUser) {
+                            // AI avatar - simple icon
+                            Icon(
+                                Icons.Filled.SmartToy,
+                                contentDescription = "AI",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        
+                        Column(
+                            modifier = Modifier.widthIn(max = 280.dp),
+                            horizontalAlignment = if (m.fromUser) Alignment.End else Alignment.Start
+                        ) {
+                            if (m.image != null) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            width = 2.dp,
+                                            brush = if (m.fromUser) 
+                                                Brush.linearGradient(listOf(VibrantOrange, GoldenYellow))
+                                            else 
+                                                Brush.linearGradient(listOf(MintGreen, SkyBlue)),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (m.fromUser) 
+                                            WarmPeach 
+                                        else 
+                                            LightCream
+                                    )
+                                ) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(m.image),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentScale = ContentScale.FillWidth
+                                    )
+                                }
+                            }
+                            
+                            if (m.text.isNotBlank()) {
+                                Card(
+                                    modifier = Modifier
+                                        .border(
+                                            width = 2.dp,
+                                            brush = if (m.fromUser) 
+                                                Brush.linearGradient(listOf(VibrantOrange, GoldenYellow))
+                                            else 
+                                                Brush.linearGradient(listOf(MintGreen, SkyBlue)),
+                                            shape = RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (m.fromUser) 16.dp else 4.dp,
+                                                bottomEnd = if (m.fromUser) 4.dp else 16.dp
+                                            )
+                                        ),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (m.fromUser) 
+                                            WarmPeach 
+                                        else 
+                                            LightCream
+                                    ),
+                                    shape = RoundedCornerShape(
+                                        topStart = 16.dp,
+                                        topEnd = 16.dp,
+                                        bottomStart = if (m.fromUser) 16.dp else 4.dp,
+                                        bottomEnd = if (m.fromUser) 4.dp else 16.dp
+                                    )
+                                ) {
+                                    if (m.isProcessing) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = if (m.fromUser) 
+                                                    MaterialTheme.colorScheme.onPrimary 
+                                                else 
+                                                    MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                "Processing prescription...", 
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (m.fromUser) 
+                                                    MaterialTheme.colorScheme.onPrimary 
+                                                else 
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            m.text, 
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = if (m.fromUser) 
+                                                DeepNavy 
+                                            else 
+                                                CharcoalGray,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (m.fromUser) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            // User avatar - simple icon
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = "User",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
             }
             
@@ -397,7 +697,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Image(
@@ -417,7 +717,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                             )
                             if (isImageUploading.value) {
                                 Row(
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     CircularProgressIndicator(
@@ -432,7 +732,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                 }
                             } else {
                                 Row(
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
@@ -468,176 +768,327 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                 }
             }
             
-            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Image upload buttons with preview and loading state
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Gallery button
-                    Box {
+            // Input area with vibrant design
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .border(
+                        width = 3.dp,
+                        brush = Brush.linearGradient(listOf(VibrantOrange, SkyBlue)),
+                        shape = RoundedCornerShape(24.dp)
+                    ),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Transparent
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFFFFF3E0),
+                                    Color(0xFFFFE0B2)
+                                )
+                            ),
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Image upload buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // Gallery button
+                        Box {
+                            IconButton(
+                                onClick = {
+                                    if (!isImageUploading.value) {
+                                        imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    }
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                when {
+                                    isImageUploading.value -> {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    selectedImage.value != null -> {
+                                        Image(
+                                            painter = rememberAsyncImagePainter(selectedImage.value),
+                                            contentDescription = "Selected image",
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .clip(CircleShape),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                    else -> {
+                                        Icon(Icons.Filled.Image, contentDescription = "Upload from gallery", modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                            
+                            // Show check mark when image is being processed
+                            if (isImageUploading.value) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = "Processing",
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .offset(x = 16.dp, y = 16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        
+                        // Camera button
                         IconButton(
                             onClick = {
                                 if (!isImageUploading.value) {
-                                    imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    if (hasCameraPermission.value) {
+                                        val photoFile = createImageFile(context)
+                                        val uri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            photoFile
+                                        )
+                                        cameraImageUri.value = uri
+                                        cameraLauncher.launch(uri)
+                                    } else {
+                                        cameraPermissionRequester.launch(Manifest.permission.CAMERA)
+                                    }
                                 }
-                            }
-                        ) {
-                            when {
-                                isImageUploading.value -> {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                }
-                                selectedImage.value != null -> {
-                                    Image(
-                                        painter = rememberAsyncImagePainter(selectedImage.value),
-                                        contentDescription = "Selected image",
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-                                else -> {
-                                    Icon(Icons.Filled.Image, contentDescription = "Upload from gallery")
-                                }
-                            }
-                        }
-                        
-                        // Show check mark when image is being processed
-                        if (isImageUploading.value) {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = "Processing",
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .offset(x = 16.dp, y = 16.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.primary
                             )
+                        ) {
+                            Icon(Icons.Filled.CameraAlt, contentDescription = "Take photo", modifier = Modifier.size(20.dp))
                         }
                     }
                     
-                    // Camera button
-                    IconButton(
+                    // Text input field
+                    OutlinedTextField(
+                        value = input.value, 
+                        onValueChange = { input.value = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type your prescription here...") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        singleLine = true
+                    )
+                    
+                    // Send button
+                    Button(
+                        enabled = !isImageUploading.value && (input.value.isNotBlank() || selectedImage.value != null),
                         onClick = {
-                            if (!isImageUploading.value) {
-                                if (hasCameraPermission.value) {
-                                    val photoFile = createImageFile(context)
-                                    val uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        photoFile
-                                    )
-                                    cameraImageUri.value = uri
-                                    cameraLauncher.launch(uri)
-                                } else {
-                                    cameraPermissionRequester.launch(Manifest.permission.CAMERA)
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Filled.CameraAlt, contentDescription = "Take photo")
-                    }
-                }
-                
-                TextField(value = input.value, onValueChange = { input.value = it }, modifier = Modifier.weight(1f))
-                Button(
-                    enabled = !isImageUploading.value && (input.value.isNotBlank() || selectedImage.value != null),
-                    onClick = {
-                        // Allow sending if there's text OR if there's a selected image
-                        if ((input.value.isBlank() && selectedImage.value == null) || isImageUploading.value) return@Button
-                        
-                        val userInput = input.value // Store the input before clearing
-                        val userMessage = ChatMessage(true, text = userInput, image = selectedImage.value)
-                        messages.add(userMessage)
-                        
-                        // Clear the image preview after sending
-                        selectedImage.value = null
-                        imageName.value = null
-                        
-                        val processingMessage = ChatMessage(false, text = "", isProcessing = true)
-                        messages.add(processingMessage)
-                        
-                        input.value = "" // Clear input immediately after storing
-                        
-                        scope.launch {
-                            try {
-                                val result = if (userMessage.image != null) {
-                                    // Process image
-                                    llm.parseFromImage(userMessage.image)
-                                } else {
-                                    // Process text
-                                    llm.parseFromText(userInput)
-                                }
-                                messages.remove(processingMessage)
-                                
-                                when (result) {
-                                    is com.example.whitelabel.data.LlmResult.Success -> {
-                                        val jsonText = result.normalizedSchedule
-                                        try {
-                                            // Parse the JSON response into ParsedPrescription
-                                            val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
-                                            parsedPrescription.value = prescription
-                                            
-                                            // Create human-readable message
-                                            val sourceType = if (userMessage.image != null) "image" else "text"
-                                            val humanReadableMessage = buildHumanReadableMessage(prescription, sourceType)
-                                            messages.add(ChatMessage(false, text = humanReadableMessage))
-                                        } catch (e: Exception) {
-                                            // If parsing fails, show the raw response
-                                            val sourceType = if (userMessage.image != null) "image" else "text"
-                                            messages.add(ChatMessage(false, text = "Prescription parsed from $sourceType (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                            // Allow sending if there's text OR if there's a selected image
+                            if ((input.value.isBlank() && selectedImage.value == null) || isImageUploading.value) return@Button
+                            
+                            val userInput = input.value // Store the input before clearing
+                            val userMessage = ChatMessage(true, text = userInput, image = selectedImage.value)
+                            messages.add(userMessage)
+                            
+                            // Clear the image preview after sending
+                            selectedImage.value = null
+                            imageName.value = null
+                            
+                            val processingMessage = ChatMessage(false, text = "", isProcessing = true)
+                            messages.add(processingMessage)
+                            
+                            input.value = "" // Clear input immediately after storing
+                            
+                            scope.launch {
+                                try {
+                                    val result = if (userMessage.image != null) {
+                                        // Process image
+                                        llm.parseFromImage(userMessage.image)
+                                    } else {
+                                        // Process text
+                                        llm.parseFromText(userInput)
+                                    }
+                                    messages.remove(processingMessage)
+                                    
+                                    when (result) {
+                                        is com.example.whitelabel.data.LlmResult.Success -> {
+                                            val jsonText = result.normalizedSchedule
+                                            try {
+                                                // Parse the JSON response into ParsedPrescription
+                                                val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
+                                                parsedPrescription.value = prescription
+                                                
+                                                // Create human-readable message
+                                                val sourceType = if (userMessage.image != null) "image" else "text"
+                                                val humanReadableMessage = buildHumanReadableMessage(prescription, sourceType)
+                                                messages.add(ChatMessage(false, text = humanReadableMessage))
+                                            } catch (e: Exception) {
+                                                // If parsing fails, show the raw response
+                                                val sourceType = if (userMessage.image != null) "image" else "text"
+                                                messages.add(ChatMessage(false, text = "Prescription parsed from $sourceType (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                                parsedPrescription.value = null
+                                            }
+                                        }
+                                        is com.example.whitelabel.data.LlmResult.Error -> {
+                                            messages.add(ChatMessage(false, text = "Error: ${result.message}"))
                                             parsedPrescription.value = null
                                         }
                                     }
-                                    is com.example.whitelabel.data.LlmResult.Error -> {
-                                        messages.add(ChatMessage(false, text = "Error: ${result.message}"))
-                                        parsedPrescription.value = null
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                messages.remove(processingMessage)
-                                messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
-                            }
-                        }
-                }) { Text("Send") }
-            }
-            Button(
-                onClick = { 
-                    parsedPrescription.value?.let { prescription ->
-                        if (hasCalendarPermission.value) {
-                            scope.launch {
-                                try {
-                                    val userSettings = settingsManager.getSettings()
-                                    val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
-                                    
-                                    // Get calendar info for better feedback
-                                    val availableCalendars = CalendarSync.getAvailableCalendars(context)
-                                    val calendarName = if (availableCalendars.isNotEmpty()) {
-                                        val calendarId = availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
-                                        availableCalendars.find { it.id == calendarId }?.name ?: "Unknown Calendar"
-                                    } else {
-                                        "Default Calendar"
-                                    }
-                                    
-                                    Toast.makeText(context, "$created events created in '$calendarName'", Toast.LENGTH_LONG).show()
                                 } catch (e: Exception) {
-                                    Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
+                                    messages.remove(processingMessage)
+                                    messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
                                 }
                             }
-                        } else {
-                            // Request calendar permissions
-                            requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
-                        }
-                    } ?: run {
-                        Toast.makeText(context, "No prescription data available. Please process a prescription first.", Toast.LENGTH_LONG).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = VibrantOrange,
+                            contentColor = PureWhite
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(VibrantOrange, GoldenYellow)
+                                ),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                    ) { 
+                        Text(
+                            "Send", 
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        )
                     }
-                }, 
-                modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                enabled = parsedPrescription.value != null
-            ) { 
-                Text("Set Timing & Approve") 
+                }
+                }
+            }
+            // Set Timing & Approve button with vibrant design
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .border(
+                        width = 3.dp,
+                        brush = if (parsedPrescription.value != null) 
+                            Brush.linearGradient(listOf(MintGreen, SkyBlue))
+                        else 
+                            Brush.linearGradient(listOf(CharcoalGray, WarmBrown)),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Transparent
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = if (parsedPrescription.value != null) 
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFFE8F8F5),
+                                        Color(0xFFD5F4E6)
+                                    )
+                                )
+                            else 
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFFF5F5F5),
+                                        Color(0xFFE0E0E0)
+                                    )
+                                ),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                ) {
+                Button(
+                    onClick = { 
+                        parsedPrescription.value?.let { prescription ->
+                            if (hasCalendarPermission.value) {
+                                scope.launch {
+                                    try {
+                                        val userSettings = settingsManager.getSettings()
+                                        val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
+                                        
+                                        // Get calendar info for better feedback
+                                        val availableCalendars = CalendarSync.getAvailableCalendars(context)
+                                        val calendarName = if (availableCalendars.isNotEmpty()) {
+                                            val calendarId = availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
+                                            availableCalendars.find { it.id == calendarId }?.name ?: "Unknown Calendar"
+                                        } else {
+                                            "Default Calendar"
+                                        }
+                                        
+                                        Toast.makeText(context, "$created events created in '$calendarName'", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            } else {
+                                // Request calendar permissions
+                                requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
+                            }
+                        } ?: run {
+                            Toast.makeText(context, "No prescription data available. Please process a prescription first.", Toast.LENGTH_LONG).show()
+                        }
+                    }, 
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    enabled = parsedPrescription.value != null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = if (parsedPrescription.value != null) 
+                            DeepNavy 
+                        else 
+                            CharcoalGray
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "✅",
+                            fontSize = 20.sp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            "Set Timing & Approve", 
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        )
+                    }
+                }
+                }
             }
         }
+    }
     }
 }
 
