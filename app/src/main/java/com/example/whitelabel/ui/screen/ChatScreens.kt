@@ -96,7 +96,8 @@ fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit) {
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                             ),
-                            color = Color.Black
+                            color = Color.Black,
+                            modifier = Modifier.padding(start = 10.dp)
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
