@@ -1,0 +1,248 @@
+package com.example.whitelabel.data.repository
+
+import com.example.whitelabel.data.ParsedPrescription
+import com.example.whitelabel.data.UserSettings
+import com.example.whitelabel.data.database.AppDatabase
+import com.example.whitelabel.data.database.entities.MedicationEventEntity
+import com.example.whitelabel.data.database.entities.PrescriptionEntity
+import com.example.whitelabel.data.database.entities.ParsedMedicationEntity
+import kotlinx.coroutines.flow.Flow
+import java.util.Calendar
+import java.util.UUID
+
+class PrescriptionRepository(private val database: AppDatabase) {
+    
+    private val prescriptionDao = database.prescriptionDao()
+    private val eventDao = database.medicationEventDao()
+    
+    // Prescription operations
+    fun getAllActivePrescriptions(): Flow<List<PrescriptionEntity>> {
+        return prescriptionDao.getAllActivePrescriptions()
+    }
+    
+    suspend fun getPrescriptionById(id: String): PrescriptionEntity? {
+        return prescriptionDao.getPrescriptionById(id)
+    }
+    
+    fun getPrescriptionByIdFlow(id: String): Flow<PrescriptionEntity?> {
+        return prescriptionDao.getPrescriptionByIdFlow(id)
+    }
+    
+    suspend fun savePrescription(prescription: PrescriptionEntity) {
+        prescriptionDao.insertPrescription(prescription)
+    }
+    
+    suspend fun updatePrescription(prescription: PrescriptionEntity) {
+        prescriptionDao.updatePrescription(prescription)
+    }
+    
+    suspend fun deactivatePrescription(id: String) {
+        prescriptionDao.deactivatePrescription(id)
+    }
+    
+    suspend fun deletePrescription(id: String) {
+        prescriptionDao.deletePrescriptionById(id)
+        eventDao.deleteEventsByPrescriptionId(id)
+    }
+    
+    // Event operations
+    fun getEventsByPrescriptionId(prescriptionId: String): Flow<List<MedicationEventEntity>> {
+        return eventDao.getEventsByPrescriptionId(prescriptionId)
+    }
+    
+    fun getUpcomingEvents(): Flow<List<MedicationEventEntity>> {
+        return eventDao.getUpcomingEvents()
+    }
+    
+    fun getCompletedEvents(): Flow<List<MedicationEventEntity>> {
+        return eventDao.getCompletedEvents()
+    }
+    
+    fun getEventsInTimeRange(startTime: Long, endTime: Long): Flow<List<MedicationEventEntity>> {
+        return eventDao.getEventsInTimeRange(startTime, endTime)
+    }
+    
+    suspend fun markEventCompleted(eventId: String) {
+        eventDao.markEventCompleted(eventId)
+    }
+    
+    suspend fun markEventIncomplete(eventId: String) {
+        eventDao.markEventIncomplete(eventId)
+    }
+    
+    suspend fun updateEventNotes(eventId: String, notes: String) {
+        val event = eventDao.getEventById(eventId)
+        event?.let {
+            eventDao.updateEvent(it.copy(notes = notes))
+        }
+    }
+    
+    suspend fun markReminderSent(eventId: String) {
+        eventDao.markReminderSent(eventId)
+    }
+    
+    suspend fun updateCalendarEventId(eventId: String, calendarEventId: Long) {
+        eventDao.updateCalendarEventId(eventId, calendarEventId)
+    }
+    
+    // Convert ParsedPrescription to PrescriptionEntity and create events
+    suspend fun createPrescriptionWithEvents(
+        parsedPrescription: ParsedPrescription,
+        userSettings: UserSettings,
+        title: String = "Prescription ${System.currentTimeMillis()}"
+    ): String {
+        val prescriptionId = UUID.randomUUID().toString()
+        
+        // Convert ParsedMedication to ParsedMedicationEntity
+        val medicationEntities = parsedPrescription.medications.map { med ->
+            ParsedMedicationEntity(
+                prescriptionId = prescriptionId,
+                name = med.name,
+                dosage = med.dosage,
+                frequency = med.frequency,
+                duration = med.duration,
+                instructions = med.instructions
+            )
+        }
+        
+        // Create PrescriptionEntity
+        val prescriptionEntity = PrescriptionEntity(
+            id = prescriptionId,
+            title = title,
+            medications = medicationEntities,
+            timesPerDay = parsedPrescription.schedule.times_per_day,
+            preferredTimes = parsedPrescription.schedule.preferred_times,
+            withFood = parsedPrescription.schedule.with_food,
+            durationDays = parsedPrescription.schedule.duration_days,
+            startTimeMinutes = parsedPrescription.schedule.start_time_minutes,
+            endTimeMinutes = parsedPrescription.schedule.end_time_minutes
+        )
+        
+        // Save prescription
+        prescriptionDao.insertPrescription(prescriptionEntity)
+        
+        // Create medication events
+        val events = createMedicationEvents(prescriptionEntity, userSettings)
+        eventDao.insertEvents(events)
+        
+        return prescriptionId
+    }
+    
+    private fun createMedicationEvents(
+        prescription: PrescriptionEntity,
+        userSettings: UserSettings
+    ): List<MedicationEventEntity> {
+        val events = mutableListOf<MedicationEventEntity>()
+        val cal = Calendar.getInstance()
+        
+        repeat(prescription.durationDays) { dayIndex ->
+            val dayCal = (cal.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, dayIndex)
+            }
+            
+            // Create multiple events per day based on prescription and user settings
+            val timesPerDay = prescription.timesPerDay
+            val prescriptionStartTime = prescription.startTimeMinutes
+            val prescriptionEndTime = prescription.endTimeMinutes
+            
+            // Use user settings as bounds, but respect prescription timing if it's within bounds
+            val startTime = maxOf(prescriptionStartTime, userSettings.earliestTimeMinutes)
+            val endTime = minOf(prescriptionEndTime, userSettings.latestTimeMinutes)
+            
+            // Calculate time slots
+            val timeSlots = if (timesPerDay <= 1) {
+                listOf(startTime)
+            } else {
+                val timeRange = endTime - startTime
+                val interval = timeRange / (timesPerDay - 1)
+                (0 until timesPerDay).map { index ->
+                    startTime + (interval * index)
+                }
+            }
+            
+            timeSlots.forEach { timeInMinutes ->
+                val eventCal = (dayCal.clone() as Calendar).apply {
+                    set(Calendar.HOUR_OF_DAY, timeInMinutes / 60)
+                    set(Calendar.MINUTE, timeInMinutes % 60)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                
+                val start = eventCal.timeInMillis
+                val end = start + userSettings.eventDurationMinutes * 60 * 1000
+                
+                // Create event title and description
+                val title = buildEventTitle(prescription)
+                val description = buildEventDescription(prescription, userSettings)
+                
+                val event = MedicationEventEntity(
+                    prescriptionId = prescription.id,
+                    title = title,
+                    description = description,
+                    startTimeMillis = start,
+                    endTimeMillis = end
+                )
+                
+                events.add(event)
+            }
+        }
+        
+        return events
+    }
+    
+    private fun buildEventTitle(prescription: PrescriptionEntity): String {
+        val medications = prescription.medications
+        return when {
+            medications.isEmpty() -> "Medication"
+            medications.size == 1 -> medications.first().name
+            medications.size <= 3 -> medications.joinToString(", ") { it.name }
+            else -> "${medications.first().name} + ${medications.size - 1} more"
+        }
+    }
+    
+    private fun buildEventDescription(prescription: PrescriptionEntity, userSettings: UserSettings): String {
+        val medications = prescription.medications.joinToString("\n") { med ->
+            "• ${med.name}: ${med.dosage} - ${med.frequency}"
+        }
+        
+        val scheduleInfo = buildString {
+            append("Schedule: ${prescription.timesPerDay} times per day")
+            
+            // Use user's default with food setting if prescription doesn't specify
+            val withFood = prescription.withFood || (userSettings.withFoodDefault && !prescription.withFood)
+            if (withFood) {
+                append(" (with food)")
+            }
+            
+            if (prescription.preferredTimes.isNotEmpty()) {
+                append("\nPreferred times: ${prescription.preferredTimes.joinToString(", ")}")
+            }
+            
+            // Add reminder info
+            if (userSettings.reminderMinutes > 0) {
+                append("\nReminder: ${userSettings.reminderMinutes} minutes before")
+            }
+        }
+        
+        return "$medications\n\n$scheduleInfo"
+    }
+    
+    // Statistics
+    suspend fun getPrescriptionStats(prescriptionId: String): PrescriptionStats {
+        val totalEvents = eventDao.getEventCountByPrescriptionId(prescriptionId)
+        val completedEvents = eventDao.getCompletedEventCountByPrescriptionId(prescriptionId)
+        val completionRate = if (totalEvents > 0) (completedEvents.toFloat() / totalEvents * 100).toInt() else 0
+        
+        return PrescriptionStats(
+            totalEvents = totalEvents,
+            completedEvents = completedEvents,
+            completionRate = completionRate
+        )
+    }
+}
+
+data class PrescriptionStats(
+    val totalEvents: Int,
+    val completedEvents: Int,
+    val completionRate: Int
+)

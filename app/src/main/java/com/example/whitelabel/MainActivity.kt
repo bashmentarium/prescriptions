@@ -26,6 +26,8 @@ import com.example.whitelabel.ui.screen.ChatDetailScreen
 import com.example.whitelabel.ui.screen.ChatListScreen
 import com.example.whitelabel.ui.screen.ScheduleBuilderScreen
 import com.example.whitelabel.ui.screen.SettingsScreen
+import com.example.whitelabel.ui.screen.PrescriptionListScreen
+import com.example.whitelabel.ui.screen.PrescriptionDetailScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
 import java.util.Calendar
 
@@ -199,7 +201,22 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
         composable("chats") {
             ChatListScreen(
                 onOpenChat = { id -> navController.navigate("chat/$id") },
-                onOpenSettings = { navController.navigate("settings") }
+                onOpenSettings = { navController.navigate("settings") },
+                onOpenPrescriptions = { navController.navigate("prescriptions") }
+            )
+        }
+        composable("prescriptions") {
+            PrescriptionListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSettings = { navController.navigate("settings") },
+                onOpenPrescriptionDetail = { id -> navController.navigate("prescription/$id") }
+            )
+        }
+        composable("prescription/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
+            val prescriptionId = it.arguments?.getString("id") ?: ""
+            PrescriptionDetailScreen(
+                prescriptionId = prescriptionId,
+                onBack = { navController.popBackStack() }
             )
         }
         composable("chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {

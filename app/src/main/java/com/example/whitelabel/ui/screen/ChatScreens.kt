@@ -63,6 +63,8 @@ import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.CalendarInfo
 import com.example.whitelabel.data.EventInfo
+import com.example.whitelabel.data.database.AppDatabase
+import com.example.whitelabel.data.repository.PrescriptionRepository
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -74,7 +76,7 @@ data class CourseItem(val name: String, val prescriptionPreview: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit) {
+fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onOpenPrescriptions: () -> Unit = {}) {
     val items = remember { 
         mutableStateListOf(
             CourseItem("Course 1", "Amoxicillin 500mg - Take 3 times daily with food for 7 days. Complete the full course even if you feel better."),
@@ -104,6 +106,16 @@ fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit) {
                         containerColor = Color.Transparent
                     ),
                     actions = {
+                        IconButton(
+                            onClick = onOpenPrescriptions
+                        ) {
+                            Icon(
+                                Icons.Filled.Medication, 
+                                contentDescription = "Saved Prescriptions",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         IconButton(
                             onClick = onOpenSettings
                         ) {
@@ -445,6 +457,8 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
     val settingsManager = remember { SettingsManager(context) }
+    val database = remember { AppDatabase.getDatabase(context) }
+    val prescriptionRepository = remember { PrescriptionRepository(database) }
     
     // Calendar permissions
     val hasCalendarPermission = remember { mutableStateOf(false) }
@@ -1027,29 +1041,29 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                 Button(
                     onClick = { 
                         parsedPrescription.value?.let { prescription ->
-                            if (hasCalendarPermission.value) {
-                                scope.launch {
-                                    try {
-                                        val userSettings = settingsManager.getSettings()
-                                        val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
-                                        
-                                        // Get calendar info for better feedback
-                                        val availableCalendars = CalendarSync.getAvailableCalendars(context)
-                                        val calendarName = if (availableCalendars.isNotEmpty()) {
-                                            val calendarId = availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
-                                            availableCalendars.find { it.id == calendarId }?.name ?: "Unknown Calendar"
-                                        } else {
-                                            "Default Calendar"
+                            scope.launch {
+                                try {
+                                    val userSettings = settingsManager.getSettings()
+                                    val prescriptionId = prescriptionRepository.createPrescriptionWithEvents(
+                                        parsedPrescription = prescription,
+                                        userSettings = userSettings,
+                                        title = "Prescription ${System.currentTimeMillis()}"
+                                    )
+                                    
+                                    Toast.makeText(context, "Prescription saved successfully with ID: $prescriptionId", Toast.LENGTH_LONG).show()
+                                    
+                                    // Optionally sync to calendar if permissions are available
+                                    if (hasCalendarPermission.value) {
+                                        try {
+                                            val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
+                                            Toast.makeText(context, "Also synced $created events to calendar", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Log.w("ChatScreens", "Failed to sync to calendar: ${e.message}")
                                         }
-                                        
-                                        Toast.makeText(context, "$created events created in '$calendarName'", Toast.LENGTH_LONG).show()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Error creating calendar events: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error saving prescription: ${e.message}", Toast.LENGTH_LONG).show()
                                 }
-                            } else {
-                                // Request calendar permissions
-                                requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
                             }
                         } ?: run {
                             Toast.makeText(context, "No prescription data available. Please process a prescription first.", Toast.LENGTH_LONG).show()
@@ -1079,7 +1093,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            "Set Timing & Approve", 
+                            "Save Prescription", 
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                             )

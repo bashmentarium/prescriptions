@@ -151,7 +151,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    "💊",
+                                    text = "⚙️",
                                     fontSize = 28.sp
                                 )
                             }
@@ -211,7 +211,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    "⏰",
+                                    text = "⏰",
                                     fontSize = 28.sp
                                 )
                                 Text(
@@ -231,7 +231,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "🌅 Earliest time:",
+                                    "Earliest time:",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 18.sp
@@ -280,7 +280,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "🌙 Latest time:",
+                                    " Latest time:",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 18.sp
@@ -360,7 +360,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    "📅",
+                                    text = "📅",
                                     fontSize = 28.sp
                                 )
                                 Text(
@@ -380,7 +380,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "⏱️ Event duration:",
+                                    "Event duration:",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 18.sp
