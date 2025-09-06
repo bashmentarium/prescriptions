@@ -28,6 +28,7 @@ import com.example.whitelabel.ui.screen.ScheduleBuilderScreen
 import com.example.whitelabel.ui.screen.SettingsScreen
 import com.example.whitelabel.ui.screen.PrescriptionListScreen
 import com.example.whitelabel.ui.screen.PrescriptionDetailScreen
+import com.example.whitelabel.ui.screen.MedicationConfirmationScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
 import java.util.Calendar
 
@@ -202,7 +203,8 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
             ChatListScreen(
                 onOpenChat = { id -> navController.navigate("chat/$id") },
                 onOpenSettings = { navController.navigate("settings") },
-                onOpenPrescriptions = { navController.navigate("prescriptions") }
+                onOpenPrescriptions = { navController.navigate("prescriptions") },
+                onOpenMedicationConfirmation = { navController.navigate("medication-confirmation") }
             )
         }
         composable("prescriptions") {
@@ -250,6 +252,9 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
         }
         composable("settings") {
             SettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable("medication-confirmation") {
+            MedicationConfirmationScreen(onBack = { navController.popBackStack() })
         }
     }
 }

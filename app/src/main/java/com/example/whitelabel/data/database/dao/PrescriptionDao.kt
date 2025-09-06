@@ -10,6 +10,9 @@ interface PrescriptionDao {
     @Query("SELECT * FROM prescriptions WHERE isActive = 1 ORDER BY createdAt DESC")
     fun getAllActivePrescriptions(): Flow<List<PrescriptionEntity>>
     
+    @Query("SELECT * FROM prescriptions ORDER BY createdAt DESC")
+    suspend fun getAllPrescriptions(): List<PrescriptionEntity>
+    
     @Query("SELECT * FROM prescriptions WHERE id = :id")
     suspend fun getPrescriptionById(id: String): PrescriptionEntity?
     

@@ -20,6 +20,10 @@ class PrescriptionRepository(private val database: AppDatabase) {
         return prescriptionDao.getAllActivePrescriptions()
     }
     
+    suspend fun getAllPrescriptions(): List<PrescriptionEntity> {
+        return prescriptionDao.getAllPrescriptions()
+    }
+    
     suspend fun getPrescriptionById(id: String): PrescriptionEntity? {
         return prescriptionDao.getPrescriptionById(id)
     }
@@ -60,6 +64,10 @@ class PrescriptionRepository(private val database: AppDatabase) {
     
     fun getEventsInTimeRange(startTime: Long, endTime: Long): Flow<List<MedicationEventEntity>> {
         return eventDao.getEventsInTimeRange(startTime, endTime)
+    }
+    
+    suspend fun getEventsInTimeRangeSuspend(startTime: Long, endTime: Long): List<MedicationEventEntity> {
+        return eventDao.getEventsInTimeRangeSuspend(startTime, endTime)
     }
     
     suspend fun markEventCompleted(eventId: String) {

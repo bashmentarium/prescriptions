@@ -76,7 +76,7 @@ data class CourseItem(val name: String, val prescriptionPreview: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onOpenPrescriptions: () -> Unit = {}) {
+fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onOpenPrescriptions: () -> Unit = {}, onOpenMedicationConfirmation: () -> Unit = {}) {
     val items = remember { 
         mutableStateListOf(
             CourseItem("Course 1", "Amoxicillin 500mg - Take 3 times daily with food for 7 days. Complete the full course even if you feel better."),
@@ -122,6 +122,16 @@ fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onO
                             Icon(
                                 Icons.Filled.Settings, 
                                 contentDescription = "Settings",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onOpenMedicationConfirmation
+                        ) {
+                            Icon(
+                                Icons.Filled.Check, 
+                                contentDescription = "Medication Confirmation",
                                 tint = Color.Black,
                                 modifier = Modifier.size(24.dp)
                             )

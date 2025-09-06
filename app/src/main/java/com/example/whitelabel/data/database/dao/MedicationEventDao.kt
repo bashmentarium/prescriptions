@@ -16,6 +16,9 @@ interface MedicationEventDao {
     @Query("SELECT * FROM medication_events WHERE startTimeMillis >= :startTime AND startTimeMillis <= :endTime ORDER BY startTimeMillis ASC")
     fun getEventsInTimeRange(startTime: Long, endTime: Long): Flow<List<MedicationEventEntity>>
     
+    @Query("SELECT * FROM medication_events WHERE startTimeMillis >= :startTime AND startTimeMillis <= :endTime ORDER BY startTimeMillis ASC")
+    suspend fun getEventsInTimeRangeSuspend(startTime: Long, endTime: Long): List<MedicationEventEntity>
+    
     @Query("SELECT * FROM medication_events WHERE isCompleted = 0 AND startTimeMillis >= :currentTime ORDER BY startTimeMillis ASC")
     fun getUpcomingEvents(currentTime: Long = System.currentTimeMillis()): Flow<List<MedicationEventEntity>>
     
