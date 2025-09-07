@@ -58,19 +58,16 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
 import com.example.whitelabel.data.ParsedPrescription
-import com.example.whitelabel.data.CalendarSync
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
-import com.example.whitelabel.data.CalendarInfo
-import com.example.whitelabel.data.EventInfo
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.repository.PrescriptionRepository
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import android.widget.Toast
+import java.util.Calendar
 
 data class CourseItem(val name: String, val prescriptionPreview: String)
 
@@ -283,102 +280,7 @@ private fun createImageFile(context: android.content.Context): File {
     return File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir)
 }
 
-// Function to create calendar events directly from prescription using user settings
-private fun createCalendarEventsFromPrescription(
-    context: android.content.Context,
-    prescription: ParsedPrescription,
-    userSettings: UserSettings
-): Int {
-    val cal = Calendar.getInstance()
-    var created = 0
-    
-    repeat(prescription.schedule.duration_days) { dayIndex ->
-        val dayCal = (cal.clone() as Calendar).apply {
-            add(Calendar.DAY_OF_YEAR, dayIndex)
-        }
-        
-        // Create multiple events per day based on prescription and user settings
-        val timesPerDay = prescription.schedule.times_per_day
-        val prescriptionStartTime = prescription.schedule.start_time_minutes
-        val prescriptionEndTime = prescription.schedule.end_time_minutes
-        
-        // Use user settings as bounds, but respect prescription timing if it's within bounds
-        val startTime = maxOf(prescriptionStartTime, userSettings.earliestTimeMinutes)
-        val endTime = minOf(prescriptionEndTime, userSettings.latestTimeMinutes)
-        
-        // Calculate time slots
-        val timeSlots = if (timesPerDay <= 1) {
-            listOf(startTime)
-        } else {
-            val timeRange = endTime - startTime
-            val interval = timeRange / (timesPerDay - 1)
-            (0 until timesPerDay).map { index ->
-                startTime + (interval * index)
-            }
-        }
-        
-        timeSlots.forEach { timeInMinutes ->
-            val eventCal = (dayCal.clone() as Calendar).apply {
-                set(Calendar.HOUR_OF_DAY, timeInMinutes / 60)
-                set(Calendar.MINUTE, timeInMinutes % 60)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            
-            val start = eventCal.timeInMillis
-            val end = start + userSettings.eventDurationMinutes * 60 * 1000 // Use user's preferred duration
-            
-            // Create event title and description from prescription
-            val title = buildEventTitle(prescription)
-            val description = buildEventDescription(prescription, userSettings)
-            
-            // Get available calendars and use the first one if default doesn't work
-            val availableCalendars = CalendarSync.getAvailableCalendars(context)
-            val calendarId = if (availableCalendars.isNotEmpty()) {
-                // Try to find primary calendar first, otherwise use the first available
-                availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
-            } else {
-                userSettings.defaultCalendarId
-            }
-            
-            Log.d("ChatScreens", "Using calendar ID: $calendarId")
-            
-            CalendarSync.insertEvent(
-                context = context,
-                title = title,
-                description = description,
-                startMillis = start,
-                endMillis = end,
-                calendarId = calendarId
-            )?.let { 
-                created++
-                Log.d("ChatScreens", "Successfully created event $created")
-            } ?: run {
-                Log.e("ChatScreens", "Failed to create event at time $timeInMinutes")
-            }
-        }
-    }
-    
-    // Verify events were actually created
-    if (created > 0) {
-        val availableCalendars = CalendarSync.getAvailableCalendars(context)
-        val calendarId = if (availableCalendars.isNotEmpty()) {
-            availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
-        } else {
-            userSettings.defaultCalendarId
-        }
-        
-        val events = CalendarSync.getEventsInCalendar(context, calendarId)
-        Log.d("ChatScreens", "Verification: Found ${events.size} events in calendar $calendarId")
-        
-        // Log recent events to help debug
-        events.take(5).forEach { event ->
-            Log.d("ChatScreens", "Recent event: ${event.title} at ${event.startTime}")
-        }
-    }
-    
-    return created
-}
+// Calendar integration removed
 
 private fun buildEventTitle(prescription: ParsedPrescription): String {
     val medications = prescription.medications
@@ -441,7 +343,7 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
     return "✅ Prescription parsed successfully from $sourceType!\n\n" +
            "💊 Medications:\n$medications\n\n" +
            "$scheduleInfo\n\n" +
-           "🎯 Ready to create calendar events! Tap 'Set Timing & Approve' to add to your calendar."
+           "🎯 Ready to save prescription! Tap 'Set Timing & Approve' to save."
 }
 
 fun formatMinutesToTime(minutes: Int): String {
@@ -470,14 +372,6 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
     val database = remember { AppDatabase.getDatabase(context) }
     val prescriptionRepository = remember { PrescriptionRepository(database) }
     
-    // Calendar permissions
-    val hasCalendarPermission = remember { mutableStateOf(false) }
-    val requester = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        hasCalendarPermission.value = result[Manifest.permission.READ_CALENDAR] == true &&
-            result[Manifest.permission.WRITE_CALENDAR] == true
-    }
     
     // Camera permissions
     val hasCameraPermission = remember { mutableStateOf(false) }
@@ -1062,15 +956,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                     
                                     Toast.makeText(context, "Prescription saved successfully with ID: $prescriptionId", Toast.LENGTH_LONG).show()
                                     
-                                    // Optionally sync to calendar if permissions are available
-                                    if (hasCalendarPermission.value) {
-                                        try {
-                                            val created = createCalendarEventsFromPrescription(context, prescription, userSettings)
-                                            Toast.makeText(context, "Also synced $created events to calendar", Toast.LENGTH_SHORT).show()
-                                        } catch (e: Exception) {
-                                            Log.w("ChatScreens", "Failed to sync to calendar: ${e.message}")
-                                        }
-                                    }
+                                    // Calendar integration removed
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error saving prescription: ${e.message}", Toast.LENGTH_LONG).show()
                                 }

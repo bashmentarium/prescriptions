@@ -17,10 +17,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.whitelabel.data.CalendarSync
 import com.example.whitelabel.data.ParsedPrescription
 import com.example.whitelabel.data.SettingsManager
-import com.example.whitelabel.data.CalendarInfo
 import android.util.Log
 import com.example.whitelabel.ui.screen.ChatDetailScreen
 import com.example.whitelabel.ui.screen.ChatListScreen
@@ -30,7 +28,6 @@ import com.example.whitelabel.ui.screen.PrescriptionListScreen
 import com.example.whitelabel.ui.screen.PrescriptionDetailScreen
 import com.example.whitelabel.ui.screen.MedicationConfirmationScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
-import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
     
@@ -130,62 +127,8 @@ class MainActivity : ComponentActivity() {
             WhitelabelTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     AppNav(onInsertEvents = { startMillis, earliest, latest, days, prescription ->
-                        val settingsManager = SettingsManager(this)
-                        val userSettings = settingsManager.getSettings()
-                        val cal = Calendar.getInstance().apply { timeInMillis = startMillis }
-                        var created = 0
-                        
-                        repeat(days) { dayIndex ->
-                            val dayCal = (cal.clone() as Calendar).apply {
-                                add(Calendar.DAY_OF_YEAR, dayIndex)
-                            }
-                            
-                            // Create multiple events per day based on prescription
-                            val timesPerDay = prescription?.schedule?.times_per_day ?: 1
-                            val timeSlots = calculateTimeSlots(earliest, latest, timesPerDay, prescription)
-                            
-                            timeSlots.forEach { timeInMinutes ->
-                                val eventCal = (dayCal.clone() as Calendar).apply {
-                                    set(Calendar.HOUR_OF_DAY, timeInMinutes / 60)
-                                    set(Calendar.MINUTE, timeInMinutes % 60)
-                                    set(Calendar.SECOND, 0)
-                                    set(Calendar.MILLISECOND, 0)
-                                }
-                                
-                                val start = eventCal.timeInMillis
-                                val end = start + userSettings.eventDurationMinutes * 60 * 1000 // Use user's preferred duration
-                                
-                                // Create event title and description from prescription
-                                val title = buildEventTitle(prescription)
-                                val description = buildDescription(prescription, userSettings)
-                                
-                                // Get available calendars and use the first one if default doesn't work
-                                val availableCalendars = CalendarSync.getAvailableCalendars(this)
-                                val calendarId = if (availableCalendars.isNotEmpty()) {
-                                    // Try to find primary calendar first, otherwise use the first available
-                                    availableCalendars.find { it.isPrimary }?.id ?: availableCalendars.first().id
-                                } else {
-                                    userSettings.defaultCalendarId
-                                }
-                                
-                                Log.d("MainActivity", "Using calendar ID: $calendarId")
-                                
-                                CalendarSync.insertEvent(
-                                    context = this,
-                                    title = title,
-                                    description = description,
-                                    startMillis = start,
-                                    endMillis = end,
-                                    calendarId = calendarId
-                                )?.let { 
-                                    created++
-                                    Log.d("MainActivity", "Successfully created event $created")
-                                } ?: run {
-                                    Log.e("MainActivity", "Failed to create event at time $timeInMinutes")
-                                }
-                            }
-                        }
-                        Toast.makeText(this, "$created events added to Calendar", Toast.LENGTH_LONG).show()
+                        // Calendar integration removed
+                        Toast.makeText(this, "Calendar integration has been removed", Toast.LENGTH_LONG).show()
                     })
                 }
             }
@@ -231,20 +174,10 @@ fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinut
             )
         }
         composable("schedule") {
-            val hasCalendarPermission = remember { mutableStateOf(false) }
-            val requester = androidx.activity.compose.rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { result ->
-                hasCalendarPermission.value = result[Manifest.permission.READ_CALENDAR] == true &&
-                    result[Manifest.permission.WRITE_CALENDAR] == true
-            }
-            LaunchedEffect(Unit) {
-                requester.launch(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
-            }
             ScheduleBuilderScreen(
                 onBack = { navController.popBackStack() }, 
                 onConfirm = { start, earliest, latest, days ->
-                    if (hasCalendarPermission.value) onInsertEvents(start, earliest, latest, days, parsedPrescription.value)
+                    onInsertEvents(start, earliest, latest, days, parsedPrescription.value)
                     navController.popBackStack()
                 },
                 parsedPrescription = parsedPrescription.value

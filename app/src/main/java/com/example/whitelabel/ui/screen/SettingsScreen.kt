@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
-import com.example.whitelabel.data.CalendarSync
 import android.widget.Toast
 import java.util.Calendar
 
@@ -707,15 +706,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             }
                             Button(
                                 onClick = {
-                                    val calendars = CalendarSync.getAvailableCalendars(context)
-                                    if (calendars.isNotEmpty()) {
-                                        val calendarList = calendars.joinToString("\n") { 
-                                            "• ${it.name} (ID: ${it.id}, Primary: ${it.isPrimary})" 
-                                        }
-                                        Toast.makeText(context, "Found ${calendars.size} calendars:\n$calendarList", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(context, "No calendars found! Check permissions.", Toast.LENGTH_LONG).show()
-                                    }
+                                    Toast.makeText(context, "Calendar integration has been removed", Toast.LENGTH_LONG).show()
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SkyBlue
@@ -726,7 +717,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.BugReport, contentDescription = null, tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Test Calendar Access",
+                                    "Calendar Removed",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
@@ -737,23 +728,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             
                             Button(
                                 onClick = {
-                                    val calendars = CalendarSync.getAvailableCalendars(context)
-                                    if (calendars.isNotEmpty()) {
-                                        val calendarId = calendars.find { it.isPrimary }?.id ?: calendars.first().id
-                                        val events = CalendarSync.getEventsInCalendar(context, calendarId)
-                                        val calendarName = calendars.find { it.id == calendarId }?.name ?: "Unknown"
-                                        
-                                        if (events.isNotEmpty()) {
-                                            val eventList = events.take(5).joinToString("\n") { 
-                                                "• ${it.title} (${java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it.startTime))})" 
-                                            }
-                                            Toast.makeText(context, "Found ${events.size} events in '$calendarName':\n$eventList", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            Toast.makeText(context, "No events found in '$calendarName'", Toast.LENGTH_LONG).show()
-                                        }
-                                    } else {
-                                        Toast.makeText(context, "No calendars available", Toast.LENGTH_LONG).show()
-                                    }
+                                    Toast.makeText(context, "Calendar integration has been removed", Toast.LENGTH_LONG).show()
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MintGreen
@@ -764,7 +739,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Icon(Icons.Filled.BugReport, contentDescription = null, tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Check Events",
+                                    "Calendar Removed",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
