@@ -31,6 +31,7 @@ import com.example.whitelabel.ui.screen.MedicationConfirmationScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
 import com.example.whitelabel.service.MedicationNotificationService
 import com.example.whitelabel.service.MedicationReminderScheduler
+import com.example.whitelabel.service.MedicationForegroundService
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.repository.PrescriptionRepository
 import com.google.firebase.messaging.FirebaseMessaging
@@ -169,6 +170,9 @@ class MainActivity : ComponentActivity() {
         // Start medication reminder scheduler
         val reminderScheduler = MedicationReminderScheduler(this)
         reminderScheduler.scheduleMedicationReminders()
+        
+        // Start foreground service for reliable background notifications
+        MedicationForegroundService.startService(this)
         
         // Set up repository with reminder scheduler
         val database = AppDatabase.getDatabase(this)

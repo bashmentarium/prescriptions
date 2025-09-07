@@ -17,6 +17,9 @@ class BootReceiver : BroadcastReceiver() {
                 // Restart medication reminder scheduler
                 val reminderScheduler = MedicationReminderScheduler(context)
                 reminderScheduler.scheduleMedicationReminders()
+                
+                // Start foreground service for reliable background processing
+                MedicationForegroundService.startService(context)
             }
         }
     }

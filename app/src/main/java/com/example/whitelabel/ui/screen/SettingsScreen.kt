@@ -15,6 +15,11 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +36,8 @@ import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.service.TestNotificationService
 import com.example.whitelabel.service.SimpleNotificationTest
+import com.example.whitelabel.service.BatteryOptimizationHelper
+import com.example.whitelabel.service.NotificationSystemTester
 import com.example.whitelabel.service.MedicationNotificationService
 import android.widget.Toast
 import java.util.Calendar
@@ -889,6 +896,195 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     "Run Notification Diagnostics",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    NotificationSystemTester.testSystemWideNotifications(context)
+                                    Toast.makeText(context, "System-wide test started - check Logcat for results", Toast.LENGTH_LONG).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2ECC71)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Test System-Wide Notifications",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    val tester = NotificationSystemTester(context)
+                                    tester.testNotificationWhenAppClosed()
+                                    Toast.makeText(context, "App closed test scheduled - close app and wait 3 minutes!", Toast.LENGTH_LONG).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFE67E22)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Test When App Closed (3 min)",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Battery Optimization Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(Color(0xFFE74C3C), Color(0xFFC0392B))
+                                            ),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🔋", fontSize = 20.sp)
+                                }
+                                Text(
+                                    "Battery Optimization",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp
+                                    ),
+                                    color = DeepNavy
+                                )
+                            }
+                            
+                            Text(
+                                "For reliable notifications when the app is closed, disable battery optimization for this app.",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 14.sp
+                                ),
+                                color = Color(0xFF7F8C8D)
+                            )
+                            
+                            val isOptimized = BatteryOptimizationHelper.isBatteryOptimizationDisabled(context)
+                            
+                            if (isOptimized) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MintGreen,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        "Battery optimization is disabled ✓",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = MintGreen
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = VibrantOrange,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        "Battery optimization is enabled - notifications may not work when app is closed",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = VibrantOrange
+                                    )
+                                }
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    BatteryOptimizationHelper.requestDisableBatteryOptimization(context)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isOptimized) Color(0xFF95A5A6) else Color(0xFFE74C3C)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp),
+                                enabled = !isOptimized
+                            ) {
+                                Icon(
+                                    if (isOptimized) Icons.Filled.CheckCircle else Icons.Filled.BatteryAlert,
+                                    contentDescription = null,
+                                    tint = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (isOptimized) "Already Optimized" else "Disable Battery Optimization",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    BatteryOptimizationHelper.openBatteryOptimizationSettings(context)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF95A5A6)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Open Battery Settings",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp

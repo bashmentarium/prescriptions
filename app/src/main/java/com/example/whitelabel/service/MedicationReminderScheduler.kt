@@ -56,38 +56,21 @@ class MedicationReminderScheduler(private val context: Context) {
         val delay = event.startTimeMillis - System.currentTimeMillis()
         
         if (delay > 0) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-                .setRequiresBatteryNotLow(false) // Allow even when battery is low
-                .setRequiresCharging(false) // Don't require charging
-                .setRequiresDeviceIdle(false) // Don't require device to be idle
-                .build()
+            // Use AlarmManager for reliable notifications when app is closed
+            val alarmScheduler = MedicationAlarmScheduler(context)
+            alarmScheduler.scheduleMedicationReminder(event, prescriptionTitle)
             
-            val data = Data.Builder()
-                .putString("event_id", event.id)
-                .putString("prescription_id", event.prescriptionId)
-                .putString("prescription_title", prescriptionTitle)
-                .putString("description", event.description)
-                .build()
-            
-            val reminderWork = OneTimeWorkRequestBuilder<SpecificMedicationReminderWorker>()
-                .setConstraints(constraints)
-                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                .setInputData(data)
-                .build()
-            
-            workManager.enqueueUniqueWork(
-                "medication_reminder_${event.id}",
-                ExistingWorkPolicy.REPLACE,
-                reminderWork
-            )
-            
-            Log.d("MedicationReminderScheduler", "Scheduled reminder for event ${event.id} in ${delay}ms")
+            Log.d("MedicationReminderScheduler", "Scheduled alarm-based reminder for event ${event.id} in ${delay}ms")
         }
     }
     
     fun cancelReminder(eventId: String) {
+        // Cancel both WorkManager and AlarmManager reminders
         workManager.cancelUniqueWork("medication_reminder_$eventId")
+        
+        val alarmScheduler = MedicationAlarmScheduler(context)
+        alarmScheduler.cancelMedicationReminder(eventId)
+        
         Log.d("MedicationReminderScheduler", "Cancelled reminder for event $eventId")
     }
 }
