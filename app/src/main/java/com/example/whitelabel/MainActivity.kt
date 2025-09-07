@@ -1,6 +1,7 @@
 package com.example.whitelabel
 
 import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -28,8 +29,24 @@ import com.example.whitelabel.ui.screen.PrescriptionListScreen
 import com.example.whitelabel.ui.screen.PrescriptionDetailScreen
 import com.example.whitelabel.ui.screen.MedicationConfirmationScreen
 import com.example.whitelabel.ui.theme.WhitelabelTheme
+import com.example.whitelabel.service.MedicationNotificationService
+import com.example.whitelabel.service.MedicationReminderScheduler
+import com.example.whitelabel.data.database.AppDatabase
+import com.example.whitelabel.data.repository.PrescriptionRepository
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
+    
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("MainActivity", "Notification permission granted")
+        } else {
+            Log.w("MainActivity", "Notification permission denied")
+            Toast.makeText(this, "Notification permission is required for medication reminders", Toast.LENGTH_LONG).show()
+        }
+    }
     
     private fun calculateTimeSlots(earliest: Int, latest: Int, timesPerDay: Int, prescription: ParsedPrescription?): List<Int> {
         if (timesPerDay <= 1) {
@@ -123,25 +140,75 @@ class MainActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize notification services
+        MedicationNotificationService.createNotificationChannel(this)
+        
+        // Initialize Firebase Messaging
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w("MainActivity", "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+            
+            // Get new FCM registration token
+            val token = task.result
+            Log.d("MainActivity", "FCM Registration Token: $token")
+            
+            // TODO: Send token to your server if needed
+        }
+        
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Log.d("MainActivity", "Requesting notification permission for Android 13+")
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            Log.d("MainActivity", "Android version < 13, no notification permission needed")
+        }
+        
+        // Start medication reminder scheduler
+        val reminderScheduler = MedicationReminderScheduler(this)
+        reminderScheduler.scheduleMedicationReminders()
+        
+        // Set up repository with reminder scheduler
+        val database = AppDatabase.getDatabase(this)
+        val repository = PrescriptionRepository(database)
+        repository.setReminderScheduler(reminderScheduler)
+        
         setContent {
             WhitelabelTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    AppNav(onInsertEvents = { startMillis, earliest, latest, days, prescription ->
-                        // Calendar integration removed
-                        Toast.makeText(this, "Calendar integration has been removed", Toast.LENGTH_LONG).show()
-                    })
+                    AppNav(
+                        onInsertEvents = { startMillis, earliest, latest, days, prescription ->
+                            // Calendar integration removed
+                            Toast.makeText(this, "Calendar integration has been removed", Toast.LENGTH_LONG).show()
+                        },
+                        initialDestination = getInitialDestination()
+                    )
                 }
             }
+        }
+    }
+    
+    private fun getInitialDestination(): String {
+        val intent = intent
+        val navigateTo = intent.getStringExtra("navigate_to")
+        return when (navigateTo) {
+            "medication-confirmation" -> "medication-confirmation"
+            else -> "chats"
         }
     }
 }
 
 @Composable
-fun AppNav(onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinutes: Int, days: Int, prescription: ParsedPrescription?) -> Unit) {
+fun AppNav(
+    onInsertEvents: (startMillis: Long, earliestMinutes: Int, latestMinutes: Int, days: Int, prescription: ParsedPrescription?) -> Unit,
+    initialDestination: String = "chats"
+) {
     val navController = rememberNavController()
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
     
-    NavHost(navController = navController, startDestination = "chats") {
+    NavHost(navController = navController, startDestination = initialDestination) {
         composable("chats") {
             ChatListScreen(
                 onOpenChat = { id -> navController.navigate("chat/$id") },

@@ -1,3 +1,4 @@
+
 package com.example.whitelabel.data.repository
 
 import com.example.whitelabel.data.ParsedPrescription
@@ -6,6 +7,7 @@ import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.database.entities.MedicationEventEntity
 import com.example.whitelabel.data.database.entities.PrescriptionEntity
 import com.example.whitelabel.data.database.entities.ParsedMedicationEntity
+import com.example.whitelabel.service.MedicationReminderScheduler
 import kotlinx.coroutines.flow.Flow
 import java.util.Calendar
 import java.util.UUID
@@ -13,7 +15,12 @@ import java.util.UUID
 class PrescriptionRepository(private val database: AppDatabase) {
     
     private val prescriptionDao = database.prescriptionDao()
-    private val eventDao = database.medicationEventDao()
+    val eventDao = database.medicationEventDao()
+    private var reminderScheduler: MedicationReminderScheduler? = null
+    
+    fun setReminderScheduler(scheduler: MedicationReminderScheduler) {
+        this.reminderScheduler = scheduler
+    }
     
     // Prescription operations
     fun getAllActivePrescriptions(): Flow<List<PrescriptionEntity>> {
@@ -78,6 +85,10 @@ class PrescriptionRepository(private val database: AppDatabase) {
         eventDao.markEventIncomplete(eventId)
     }
     
+    suspend fun getEventById(eventId: String): MedicationEventEntity? {
+        return eventDao.getEventById(eventId)
+    }
+    
     suspend fun updateEventNotes(eventId: String, notes: String) {
         val event = eventDao.getEventById(eventId)
         event?.let {
@@ -132,6 +143,13 @@ class PrescriptionRepository(private val database: AppDatabase) {
         // Create medication events
         val events = createMedicationEvents(prescriptionEntity, userSettings)
         eventDao.insertEvents(events)
+        
+        // Schedule notification reminders for each event
+        reminderScheduler?.let { scheduler ->
+            events.forEach { event ->
+                scheduler.scheduleSpecificReminder(event, prescriptionEntity.title)
+            }
+        }
         
         return prescriptionId
     }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
+import com.example.whitelabel.service.TestNotificationService
+import com.example.whitelabel.service.SimpleNotificationTest
+import com.example.whitelabel.service.MedicationNotificationService
 import android.widget.Toast
 import java.util.Calendar
 
@@ -39,6 +43,8 @@ import com.example.whitelabel.ui.theme.*
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
+    val testNotificationService = remember { TestNotificationService(context) }
+    val simpleNotificationTest = remember { SimpleNotificationTest(context) }
     var settings by remember { mutableStateOf(settingsManager.getSettings()) }
     
     Box(
@@ -740,6 +746,149 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     "Calendar Removed",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Test Notification Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(VibrantOrange, BrightCoral)
+                                            ),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🔔", fontSize = 20.sp)
+                                }
+                                Text(
+                                    "Test Push Notifications",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp
+                                    ),
+                                    color = DeepNavy
+                                )
+                            }
+                            
+                            Text(
+                                "Test the medication reminder notifications to ensure they work correctly.",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 14.sp
+                                ),
+                                color = Color(0xFF7F8C8D)
+                            )
+                            
+                            Button(
+                                onClick = {
+                                    simpleNotificationTest.showSimpleTestNotification()
+                                    Toast.makeText(context, "Simple test notification sent!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SkyBlue
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.BugReport, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Simple Test (No WorkManager)",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    testNotificationService.showImmediateTestNotification()
+                                    Toast.makeText(context, "Test notification sent!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = VibrantOrange
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.BugReport, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Send Test Notification Now",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    testNotificationService.createTestMedicationEvent()
+                                    Toast.makeText(context, "Test reminder scheduled for 1 minute!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MintGreen
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.BugReport, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Schedule Test Reminder (1 min)",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    val diagnostics = MedicationNotificationService.diagnoseNotificationSystem(context)
+                                    Toast.makeText(context, "Diagnostics logged - check Logcat", Toast.LENGTH_LONG).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF9B59B6)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(48.dp)
+                            ) {
+                                Icon(Icons.Filled.Info, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Run Notification Diagnostics",
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
