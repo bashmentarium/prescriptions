@@ -100,6 +100,8 @@ class RealAnthropicService(private val context: Context) : LlmService {
                     - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
                     - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
                     - For multiple daily doses, spread them evenly between start and end times
+                    - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
+                    - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
                     
                     Prescription text: $text
                     
@@ -197,6 +199,8 @@ class RealAnthropicService(private val context: Context) : LlmService {
                     - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
                     - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
                     - For multiple daily doses, spread them evenly between start and end times
+                    - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
+                    - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
                     
                     Respond with only the JSON, no additional text.
                 """.trimIndent()

@@ -174,9 +174,26 @@ class PrescriptionRepository(private val database: AppDatabase) {
             val prescriptionStartTime = prescription.startTimeMinutes
             val prescriptionEndTime = prescription.endTimeMinutes
             
-            // Use user settings as bounds, but respect prescription timing if it's within bounds
-            val startTime = maxOf(prescriptionStartTime, userSettings.earliestTimeMinutes)
-            val endTime = minOf(prescriptionEndTime, userSettings.latestTimeMinutes)
+            // Determine time bounds with proper precedence:
+            // 1. If prescription has specific times (not defaults), use them
+            // 2. Otherwise, use user settings as the primary source
+            val isPrescriptionSpecific = prescriptionStartTime != 480 || prescriptionEndTime != 1200
+            
+            val startTime = if (isPrescriptionSpecific) {
+                // Prescription has specific times, but still respect user bounds as minimum/maximum
+                maxOf(prescriptionStartTime, userSettings.earliestTimeMinutes)
+            } else {
+                // Prescription uses defaults, use user settings
+                userSettings.earliestTimeMinutes
+            }
+            
+            val endTime = if (isPrescriptionSpecific) {
+                // Prescription has specific times, but still respect user bounds as minimum/maximum
+                minOf(prescriptionEndTime, userSettings.latestTimeMinutes)
+            } else {
+                // Prescription uses defaults, use user settings
+                userSettings.latestTimeMinutes
+            }
             
             // Calculate time slots
             val timeSlots = if (timesPerDay <= 1) {
