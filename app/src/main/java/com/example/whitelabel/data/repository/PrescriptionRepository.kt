@@ -134,7 +134,8 @@ class PrescriptionRepository(private val database: AppDatabase) {
             withFood = parsedPrescription.schedule.with_food,
             durationDays = parsedPrescription.schedule.duration_days,
             startTimeMinutes = parsedPrescription.schedule.start_time_minutes,
-            endTimeMinutes = parsedPrescription.schedule.end_time_minutes
+            endTimeMinutes = parsedPrescription.schedule.end_time_minutes,
+            startDateMillis = System.currentTimeMillis()
         )
         
         // Save prescription
@@ -159,7 +160,9 @@ class PrescriptionRepository(private val database: AppDatabase) {
         userSettings: UserSettings
     ): List<MedicationEventEntity> {
         val events = mutableListOf<MedicationEventEntity>()
-        val cal = Calendar.getInstance()
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = prescription.startDateMillis
+        }
         
         repeat(prescription.durationDays) { dayIndex ->
             val dayCal = (cal.clone() as Calendar).apply {
@@ -253,6 +256,65 @@ class PrescriptionRepository(private val database: AppDatabase) {
         return "$medications\n\n$scheduleInfo"
     }
     
+    // Update prescription and recalculate events
+    suspend fun updatePrescriptionAndRecalculateEvents(
+        prescription: PrescriptionEntity,
+        userSettings: UserSettings,
+        preservePastEvents: Boolean = true
+    ) {
+        // Update the prescription
+        prescriptionDao.updatePrescription(prescription)
+        
+        if (preservePastEvents) {
+            // Get current events to preserve past ones
+            val currentEvents = eventDao.getEventsByPrescriptionIdSuspend(prescription.id)
+            val currentTime = System.currentTimeMillis()
+            
+            // Separate past and future events
+            val pastEvents = currentEvents.filter { it.startTimeMillis < currentTime }
+            val futureEvents = currentEvents.filter { it.startTimeMillis >= currentTime }
+            
+            // Delete only future events
+            futureEvents.forEach { event ->
+                eventDao.deleteEventById(event.id)
+                reminderScheduler?.cancelReminder(event.id)
+            }
+            
+            // Create new events from the updated prescription
+            val newEvents = createMedicationEvents(prescription, userSettings)
+            
+            // Filter out events that are in the past (shouldn't happen with new prescription, but safety check)
+            val validNewEvents = newEvents.filter { it.startTimeMillis >= currentTime }
+            
+            // Insert new events
+            eventDao.insertEvents(validNewEvents)
+            
+            // Schedule reminders for new events
+            reminderScheduler?.let { scheduler ->
+                validNewEvents.forEach { event ->
+                    scheduler.scheduleSpecificReminder(event, prescription.title)
+                }
+            }
+        } else {
+            // Delete all events and recreate them
+            eventDao.deleteEventsByPrescriptionId(prescription.id)
+            val newEvents = createMedicationEvents(prescription, userSettings)
+            eventDao.insertEvents(newEvents)
+            
+            // Schedule reminders for all new events
+            reminderScheduler?.let { scheduler ->
+                newEvents.forEach { event ->
+                    scheduler.scheduleSpecificReminder(event, prescription.title)
+                }
+            }
+        }
+    }
+    
+    // Helper method to get events synchronously
+    private suspend fun getEventsByPrescriptionIdSuspend(prescriptionId: String): List<MedicationEventEntity> {
+        return eventDao.getEventsByPrescriptionIdSuspend(prescriptionId)
+    }
+
     // Statistics
     suspend fun getPrescriptionStats(prescriptionId: String): PrescriptionStats {
         val totalEvents = eventDao.getEventCountByPrescriptionId(prescriptionId)

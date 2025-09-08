@@ -6,10 +6,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
+import android.app.DatePickerDialog
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +26,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.whitelabel.data.SettingsManager
+import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.database.entities.MedicationEventEntity
 import com.example.whitelabel.data.database.entities.PrescriptionEntity
@@ -112,7 +119,11 @@ fun PrescriptionDetailScreen(
                 ) {
                     // Prescription info card
                     item {
-                        PrescriptionInfoCard(prescription = prescription!!)
+                        PrescriptionInfoCard(
+                            prescription = prescription!!,
+                            prescriptionRepository = prescriptionRepository,
+                            userSettings = remember { SettingsManager(context).getSettings() }
+                        )
                     }
                     
                     // Statistics card
@@ -155,7 +166,39 @@ fun PrescriptionDetailScreen(
 }
 
 @Composable
-fun PrescriptionInfoCard(prescription: PrescriptionEntity) {
+fun PrescriptionInfoCard(
+    prescription: PrescriptionEntity,
+    prescriptionRepository: PrescriptionRepository,
+    userSettings: UserSettings
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editedDuration by remember { mutableStateOf(prescription.durationDays.toString()) }
+    var editedFrequency by remember { mutableStateOf(prescription.timesPerDay.toString()) }
+    var editedStartDate by remember { mutableStateOf(prescription.startDateMillis) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    
+    fun showDatePicker() {
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = editedStartDate
+        }
+        val datePickerDialog = DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val newCalendar = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth)
+                }
+                editedStartDate = newCalendar.timeInMillis
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+        datePickerDialog.show()
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -189,25 +232,66 @@ fun PrescriptionInfoCard(prescription: PrescriptionEntity) {
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        Icons.Filled.Medication,
-                        contentDescription = "Prescription",
-                        tint = DeepNavy,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Text(
-                        "Prescription Information",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
-                        color = DeepNavy
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Medication,
+                            contentDescription = "Prescription",
+                            tint = DeepNavy,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            "Prescription Information",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            ),
+                            color = DeepNavy
+                        )
+                    }
+                    
+                    // Edit/Save button
+                    IconButton(
+                        onClick = {
+                            if (isEditing) {
+                                // Save changes
+                                scope.launch {
+                                    try {
+                                        val updatedPrescription = prescription.copy(
+                                            durationDays = editedDuration.toIntOrNull() ?: prescription.durationDays,
+                                            timesPerDay = editedFrequency.toIntOrNull() ?: prescription.timesPerDay,
+                                            startDateMillis = editedStartDate
+                                        )
+                                        prescriptionRepository.updatePrescriptionAndRecalculateEvents(
+                                            updatedPrescription,
+                                            userSettings,
+                                            preservePastEvents = true
+                                        )
+                                        isEditing = false
+                                    } catch (e: Exception) {
+                                        // Handle error - could show a snackbar
+                                    }
+                                }
+                            } else {
+                                isEditing = true
+                            }
+                        }
+                    ) {
+                        Icon(
+                            if (isEditing) Icons.Filled.Save else Icons.Filled.Edit,
+                            contentDescription = if (isEditing) "Save changes" else "Edit prescription",
+                            tint = DeepNavy,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
                 
-                // Medications
+                // Medications (read-only)
                 Text(
                     "Medications:",
                     style = MaterialTheme.typography.titleMedium.copy(
@@ -223,12 +307,74 @@ fun PrescriptionInfoCard(prescription: PrescriptionEntity) {
                     )
                 }
                 
-                // Schedule details
-                Text(
-                    "Schedule: ${prescription.timesPerDay} times per day for ${prescription.durationDays} days",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF7F8C8D)
-                )
+                // Editable fields
+                if (isEditing) {
+                    // Duration field
+                    OutlinedTextField(
+                        value = editedDuration,
+                        onValueChange = { editedDuration = it },
+                        label = { Text("Duration (days)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
+                    )
+                    
+                    // Frequency field
+                    OutlinedTextField(
+                        value = editedFrequency,
+                        onValueChange = { editedFrequency = it },
+                        label = { Text("Times per day") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
+                    )
+                    
+                    // Start date field
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Start Date:",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = DeepNavy
+                        )
+                        OutlinedTextField(
+                            value = dateFormat.format(Date(editedStartDate)),
+                            onValueChange = { },
+                            readOnly = true,
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { showDatePicker() }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Schedule,
+                                        contentDescription = "Select date",
+                                        tint = DeepNavy
+                                    )
+                                }
+                            }
+                        )
+                    }
+                } else {
+                    // Display mode
+                    Text(
+                        "Schedule: ${prescription.timesPerDay} times per day for ${prescription.durationDays} days",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF7F8C8D)
+                    )
+                    
+                    Text(
+                        "Start Date: ${dateFormat.format(Date(prescription.startDateMillis))}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF7F8C8D)
+                    )
+                }
                 
                 if (prescription.preferredTimes.isNotEmpty()) {
                     Text(

@@ -10,6 +10,9 @@ interface MedicationEventDao {
     @Query("SELECT * FROM medication_events WHERE prescriptionId = :prescriptionId ORDER BY startTimeMillis ASC")
     fun getEventsByPrescriptionId(prescriptionId: String): Flow<List<MedicationEventEntity>>
     
+    @Query("SELECT * FROM medication_events WHERE prescriptionId = :prescriptionId ORDER BY startTimeMillis ASC")
+    suspend fun getEventsByPrescriptionIdSuspend(prescriptionId: String): List<MedicationEventEntity>
+    
     @Query("SELECT * FROM medication_events WHERE id = :id")
     suspend fun getEventById(id: String): MedicationEventEntity?
     

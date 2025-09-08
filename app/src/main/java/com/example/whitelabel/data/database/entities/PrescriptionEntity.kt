@@ -19,6 +19,7 @@ data class PrescriptionEntity(
     val durationDays: Int,
     val startTimeMinutes: Int,
     val endTimeMinutes: Int,
+    val startDateMillis: Long = System.currentTimeMillis(), // Start date for the prescription
     val createdAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = true
 )
