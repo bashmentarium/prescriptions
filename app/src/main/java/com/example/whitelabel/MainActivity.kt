@@ -236,7 +236,9 @@ fun AppNav(
             )
         }
         composable("chat/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
+            val conversationId = it.arguments?.getString("id") ?: ""
             ChatDetailScreen(
+                conversationId = conversationId,
                 onBack = { navController.popBackStack() }, 
                 onOpenSchedule = { prescription -> 
                     parsedPrescription.value = prescription

@@ -9,9 +9,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import com.example.whitelabel.data.database.dao.MedicationEventDao
 import com.example.whitelabel.data.database.dao.PrescriptionDao
+import com.example.whitelabel.data.database.dao.ChatConversationDao
+import com.example.whitelabel.data.database.dao.ChatMessageDao
 import com.example.whitelabel.data.database.entities.MedicationEventEntity
 import com.example.whitelabel.data.database.entities.PrescriptionEntity
 import com.example.whitelabel.data.database.entities.ParsedMedicationEntity
+import com.example.whitelabel.data.database.entities.ChatConversationEntity
+import com.example.whitelabel.data.database.entities.ChatMessageEntity
 import com.example.whitelabel.data.database.converters.MedicationListConverter
 import com.example.whitelabel.data.database.converters.StringListConverter
 
@@ -19,9 +23,11 @@ import com.example.whitelabel.data.database.converters.StringListConverter
     entities = [
         PrescriptionEntity::class,
         ParsedMedicationEntity::class,
-        MedicationEventEntity::class
+        MedicationEventEntity::class,
+        ChatConversationEntity::class,
+        ChatMessageEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(
@@ -32,6 +38,8 @@ abstract class AppDatabase : RoomDatabase() {
     
     abstract fun prescriptionDao(): PrescriptionDao
     abstract fun medicationEventDao(): MedicationEventDao
+    abstract fun chatConversationDao(): ChatConversationDao
+    abstract fun chatMessageDao(): ChatMessageDao
     
     companion object {
         @Volatile
@@ -45,6 +53,36 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
         
+        // Migration from version 2 to 3
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create chat_conversations table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS chat_conversations (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        prescriptionPreview TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        isActive INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                
+                // Create chat_messages table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS chat_messages (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        conversationId TEXT NOT NULL,
+                        fromUser INTEGER NOT NULL,
+                        text TEXT NOT NULL DEFAULT '',
+                        imageUri TEXT,
+                        isProcessing INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL
+                    )
+                """)
+            }
+        }
+        
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -52,7 +90,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "whitelabel_database"
                 )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration() // For development - remove in production
                 .build()
                 INSTANCE = instance

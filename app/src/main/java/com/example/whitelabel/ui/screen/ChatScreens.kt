@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -62,6 +63,9 @@ import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.repository.PrescriptionRepository
+import com.example.whitelabel.data.repository.ChatRepository
+import com.example.whitelabel.data.toCourseItem
+import com.example.whitelabel.data.toChatMessage
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -74,11 +78,18 @@ data class CourseItem(val name: String, val prescriptionPreview: String)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onOpenPrescriptions: () -> Unit = {}, onOpenMedicationConfirmation: () -> Unit = {}) {
-    val items = remember { 
-        mutableStateListOf(
-            CourseItem("Course 1", "Amoxicillin 500mg - Take 3 times daily with food for 7 days. Complete the full course even if you feel better."),
-            CourseItem("Course 2", "Ibuprofen 400mg - Take as needed for pain, maximum 3 times per day. Take with food to reduce stomach irritation.")
-        ) 
+    val context = LocalContext.current
+    val database = remember { AppDatabase.getDatabase(context) }
+    val chatRepository = remember { ChatRepository(database) }
+    val scope = rememberCoroutineScope()
+    
+    val conversations = chatRepository.getAllActiveConversations().collectAsState(initial = emptyList())
+    val items = remember { mutableStateListOf<CourseItem>() }
+    
+    // Update items when conversations change
+    LaunchedEffect(conversations.value) {
+        items.clear()
+        items.addAll(conversations.value.map { it.toCourseItem() })
     }
     
     Box(
@@ -139,9 +150,13 @@ fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onO
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = {
-                        val newCourse = CourseItem("Course ${items.size + 1}", "New prescription - details will be added after processing")
-                        items.add(newCourse)
-                        onOpenChat(newCourse.name)
+                        scope.launch {
+                            val conversationId = chatRepository.createConversation(
+                                title = "Course ${items.size + 1}",
+                                prescriptionPreview = "New prescription - details will be added after processing"
+                            )
+                            onOpenChat(conversationId)
+                        }
                     },
                     containerColor = Color.Transparent,
                     contentColor = Color.Black,
@@ -180,7 +195,11 @@ fun ChatListScreen(onOpenChat: (String) -> Unit, onOpenSettings: () -> Unit, onO
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(75.dp)
-                            .clickable { onOpenChat(courseItem.name) }
+                            .clickable { 
+                                // Find the conversation ID by matching the title
+                                val conversation = conversations.value.find { it.title == courseItem.name }
+                                conversation?.let { onOpenChat(it.id) }
+                            }
                             .border(
                                 width = 1.dp,
                                 color = BorderGray,
@@ -326,12 +345,21 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
     }
     
     val schedule = prescription.schedule
-    val startTime = formatMinutesToTime(schedule.start_time_minutes)
-    val endTime = formatMinutesToTime(schedule.end_time_minutes)
+    val isPrescriptionSpecific = schedule.start_time_minutes != 480 || schedule.end_time_minutes != 1200
     
     val scheduleInfo = buildString {
         append("📅 Schedule: ${schedule.times_per_day} times per day for ${schedule.duration_days} days")
-        append("\n⏰ Timing: Between $startTime and $endTime")
+        
+        if (isPrescriptionSpecific) {
+            // Show prescription-specific times
+            val startTime = formatMinutesToTime(schedule.start_time_minutes)
+            val endTime = formatMinutesToTime(schedule.end_time_minutes)
+            append("\n⏰ Timing: Between $startTime and $endTime (prescription-specific)")
+        } else {
+            // Show that user settings will be used
+            append("\n⏰ Timing: Will use your preferred time settings")
+        }
+        
         if (schedule.with_food) {
             append("\n🍽️ Take with food")
         }
@@ -360,16 +388,27 @@ fun formatMinutesToTime(minutes: Int): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
-    val messages = remember { mutableStateListOf<ChatMessage>() }
-    val input = remember { mutableStateOf("") }
+fun ChatDetailScreen(conversationId: String, onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -> Unit) {
     val context = LocalContext.current
-    val llm: LlmService = remember { RealAnthropicService(context) }
+    val database = remember { AppDatabase.getDatabase(context) }
+    val chatRepository = remember { ChatRepository(database) }
     val scope = rememberCoroutineScope()
+    
+    val messages = remember { mutableStateListOf<ChatMessage>() }
+    val conversation = remember { mutableStateOf<com.example.whitelabel.data.database.entities.ChatConversationEntity?>(null) }
+    
+    // Load conversation and messages
+    LaunchedEffect(conversationId) {
+        conversation.value = chatRepository.getConversationById(conversationId)
+        val savedMessages = chatRepository.getMessagesByConversationIdSuspend(conversationId)
+        messages.clear()
+        messages.addAll(savedMessages.map { it.toChatMessage() })
+    }
+    val input = remember { mutableStateOf("") }
+    val llm: LlmService = remember { RealAnthropicService(context) }
     val gson = remember { Gson() }
     val parsedPrescription = remember { mutableStateOf<ParsedPrescription?>(null) }
     val settingsManager = remember { SettingsManager(context) }
-    val database = remember { AppDatabase.getDatabase(context) }
     val prescriptionRepository = remember { PrescriptionRepository(database) }
     
     
@@ -827,6 +866,17 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                             
                             val userInput = input.value // Store the input before clearing
                             val userMessage = ChatMessage(true, text = userInput, image = selectedImage.value)
+                            
+                            // Persist user message to database
+                            scope.launch {
+                                chatRepository.addMessage(
+                                    conversationId = conversationId,
+                                    fromUser = true,
+                                    text = userInput,
+                                    imageUri = selectedImage.value?.toString()
+                                )
+                            }
+                            
                             messages.add(userMessage)
                             
                             // Clear the image preview after sending
@@ -834,6 +884,17 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                             imageName.value = null
                             
                             val processingMessage = ChatMessage(false, text = "", isProcessing = true)
+                            
+                            // Persist processing message to database
+                            scope.launch {
+                                chatRepository.addMessage(
+                                    conversationId = conversationId,
+                                    fromUser = false,
+                                    text = "",
+                                    isProcessing = true
+                                )
+                            }
+                            
                             messages.add(processingMessage)
                             
                             input.value = "" // Clear input immediately after storing
@@ -860,22 +921,57 @@ fun ChatDetailScreen(onBack: () -> Unit, onOpenSchedule: (ParsedPrescription?) -
                                                 // Create human-readable message
                                                 val sourceType = if (userMessage.image != null) "image" else "text"
                                                 val humanReadableMessage = buildHumanReadableMessage(prescription, sourceType)
+                                                
+                                                // Persist AI response to database
+                                                chatRepository.addMessage(
+                                                    conversationId = conversationId,
+                                                    fromUser = false,
+                                                    text = humanReadableMessage
+                                                )
+                                                
                                                 messages.add(ChatMessage(false, text = humanReadableMessage))
                                             } catch (e: Exception) {
                                                 // If parsing fails, show the raw response
                                                 val sourceType = if (userMessage.image != null) "image" else "text"
-                                                messages.add(ChatMessage(false, text = "Prescription parsed from $sourceType (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."))
+                                                val rawResponseMessage = "Prescription parsed from $sourceType (raw):\n\n$jsonText\n\nTap 'Set Timing & Approve' to continue."
+                                                
+                                                // Persist AI response to database
+                                                chatRepository.addMessage(
+                                                    conversationId = conversationId,
+                                                    fromUser = false,
+                                                    text = rawResponseMessage
+                                                )
+                                                
+                                                messages.add(ChatMessage(false, text = rawResponseMessage))
                                                 parsedPrescription.value = null
                                             }
                                         }
                                         is com.example.whitelabel.data.LlmResult.Error -> {
-                                            messages.add(ChatMessage(false, text = "Error: ${result.message}"))
+                                            val errorMessage = "Error: ${result.message}"
+                                            
+                                            // Persist error message to database
+                                            chatRepository.addMessage(
+                                                conversationId = conversationId,
+                                                fromUser = false,
+                                                text = errorMessage
+                                            )
+                                            
+                                            messages.add(ChatMessage(false, text = errorMessage))
                                             parsedPrescription.value = null
                                         }
                                     }
                                 } catch (e: Exception) {
                                     messages.remove(processingMessage)
-                                    messages.add(ChatMessage(false, text = "Error processing prescription: ${e.message}"))
+                                    val exceptionMessage = "Error processing prescription: ${e.message}"
+                                    
+                                    // Persist exception message to database
+                                    chatRepository.addMessage(
+                                        conversationId = conversationId,
+                                        fromUser = false,
+                                        text = exceptionMessage
+                                    )
+                                    
+                                    messages.add(ChatMessage(false, text = exceptionMessage))
                                 }
                             }
                         },
@@ -1015,36 +1111,61 @@ fun ScheduleBuilderScreen(
     val latest = remember { mutableStateOf(20 * 60) }
     val days = remember { mutableStateOf(7) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val settingsManager = remember { SettingsManager(context) }
 
-    // Pre-populate values from parsed prescription
+    // Initialize with user settings first, then apply prescription overrides
+    LaunchedEffect(Unit) {
+        val userSettings = settingsManager.getSettings()
+        earliest.value = userSettings.earliestTimeMinutes
+        latest.value = userSettings.latestTimeMinutes
+    }
+
+    // Apply prescription overrides if available
     LaunchedEffect(parsedPrescription) {
         parsedPrescription?.let { prescription ->
             // Set duration days from prescription
             days.value = prescription.schedule.duration_days
             
-            // Set time range based on preferred times
+            // Check if prescription has specific times (not defaults)
             val schedule = prescription.schedule
-            when {
-                schedule.preferred_times.contains("morning") && schedule.preferred_times.contains("evening") -> {
-                    earliest.value = 8 * 60 // 8:00 AM
-                    latest.value = 20 * 60  // 8:00 PM
-                }
-                schedule.preferred_times.contains("morning") -> {
-                    earliest.value = 7 * 60  // 7:00 AM
-                    latest.value = 12 * 60   // 12:00 PM
-                }
-                schedule.preferred_times.contains("afternoon") -> {
-                    earliest.value = 12 * 60 // 12:00 PM
-                    latest.value = 17 * 60   // 5:00 PM
-                }
-                schedule.preferred_times.contains("evening") -> {
-                    earliest.value = 17 * 60 // 5:00 PM
-                    latest.value = 22 * 60   // 10:00 PM
-                }
-                else -> {
-                    // Default to morning if no specific times
-                    earliest.value = 8 * 60
-                    latest.value = 20 * 60
+            val isPrescriptionSpecific = schedule.start_time_minutes != 480 || schedule.end_time_minutes != 1200
+            
+            if (isPrescriptionSpecific) {
+                // Prescription has specific times, use them but respect user bounds
+                val userSettings = settingsManager.getSettings()
+                earliest.value = maxOf(schedule.start_time_minutes, userSettings.earliestTimeMinutes)
+                latest.value = minOf(schedule.end_time_minutes, userSettings.latestTimeMinutes)
+            } else {
+                // Prescription uses defaults, keep user settings but adjust based on preferred times if needed
+                val userSettings = settingsManager.getSettings()
+                when {
+                    schedule.preferred_times.contains("morning") && schedule.preferred_times.contains("evening") -> {
+                        // Keep user settings but ensure they cover morning to evening
+                        earliest.value = minOf(userSettings.earliestTimeMinutes, 8 * 60)
+                        latest.value = maxOf(userSettings.latestTimeMinutes, 20 * 60)
+                    }
+                    schedule.preferred_times.contains("morning") -> {
+                        // Adjust to morning range if user settings allow
+                        if (userSettings.earliestTimeMinutes <= 12 * 60) {
+                            earliest.value = userSettings.earliestTimeMinutes
+                            latest.value = minOf(userSettings.latestTimeMinutes, 12 * 60)
+                        }
+                    }
+                    schedule.preferred_times.contains("afternoon") -> {
+                        // Adjust to afternoon range if user settings allow
+                        if (userSettings.latestTimeMinutes >= 12 * 60) {
+                            earliest.value = maxOf(userSettings.earliestTimeMinutes, 12 * 60)
+                            latest.value = minOf(userSettings.latestTimeMinutes, 17 * 60)
+                        }
+                    }
+                    schedule.preferred_times.contains("evening") -> {
+                        // Adjust to evening range if user settings allow
+                        if (userSettings.latestTimeMinutes >= 17 * 60) {
+                            earliest.value = maxOf(userSettings.earliestTimeMinutes, 17 * 60)
+                            latest.value = userSettings.latestTimeMinutes
+                        }
+                    }
+                    // If no specific preferred times, keep user settings as-is
                 }
             }
         }
