@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +32,7 @@ import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.database.entities.MedicationEventEntity
+import com.example.whitelabel.data.database.entities.ParsedMedicationEntity
 import com.example.whitelabel.data.database.entities.PrescriptionEntity
 import com.example.whitelabel.data.repository.PrescriptionRepository
 import com.example.whitelabel.data.repository.PrescriptionStats
@@ -176,6 +179,7 @@ fun PrescriptionInfoCard(
     var editedFrequency by remember { mutableStateOf(prescription.timesPerDay.toString()) }
     var editedInterval by remember { mutableStateOf(prescription.intervalDays.toString()) }
     var editedStartDate by remember { mutableStateOf(prescription.startDateMillis) }
+    var editedMedications by remember { mutableStateOf(prescription.medications.toMutableList()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     
@@ -198,6 +202,37 @@ fun PrescriptionInfoCard(
             calendar.get(Calendar.DAY_OF_MONTH)
         )
         datePickerDialog.show()
+    }
+    
+    fun addMedication() {
+        editedMedications.add(
+            ParsedMedicationEntity(
+                prescriptionId = prescription.id,
+                name = "",
+                dosage = "",
+                frequency = "",
+                duration = "",
+                instructions = ""
+            )
+        )
+    }
+    
+    fun removeMedication(index: Int) {
+        if (editedMedications.size > 1) {
+            editedMedications.removeAt(index)
+        }
+    }
+    
+    fun updateMedication(index: Int, field: String, value: String) {
+        val medication = editedMedications[index]
+        editedMedications[index] = when (field) {
+            "name" -> medication.copy(name = value)
+            "dosage" -> medication.copy(dosage = value)
+            "frequency" -> medication.copy(frequency = value)
+            "duration" -> medication.copy(duration = value)
+            "instructions" -> medication.copy(instructions = value)
+            else -> medication
+        }
     }
     
     Card(
@@ -267,7 +302,8 @@ fun PrescriptionInfoCard(
                                             durationDays = editedDuration.toIntOrNull() ?: prescription.durationDays,
                                             timesPerDay = editedFrequency.toIntOrNull() ?: prescription.timesPerDay,
                                             intervalDays = editedInterval.toIntOrNull() ?: prescription.intervalDays,
-                                            startDateMillis = editedStartDate
+                                            startDateMillis = editedStartDate,
+                                            medications = editedMedications
                                         )
                                         prescriptionRepository.updatePrescriptionAndRecalculateEvents(
                                             updatedPrescription,
@@ -293,20 +329,54 @@ fun PrescriptionInfoCard(
                     }
                 }
                 
-                // Medications (read-only)
-                Text(
-                    "Medications:",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = DeepNavy
-                )
-                prescription.medications.forEach { medication ->
+                // Medications section
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        "• ${medication.name}: ${medication.dosage} - ${medication.frequency}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF7F8C8D)
+                        "Medications:",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = DeepNavy
                     )
+                    
+                    if (isEditing) {
+                        IconButton(
+                            onClick = { addMedication() }
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Add medication",
+                                tint = DeepNavy,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+                
+                if (isEditing) {
+                    // Editable medications
+                    editedMedications.forEachIndexed { index, medication ->
+                        MedicationEditCard(
+                            medication = medication,
+                            index = index,
+                            onUpdate = { field, value -> updateMedication(index, field, value) },
+                            onRemove = { removeMedication(index) },
+                            canRemove = editedMedications.size > 1
+                        )
+                    }
+                } else {
+                    // Display medications
+                    prescription.medications.forEach { medication ->
+                        Text(
+                            "• ${medication.name}: ${medication.dosage} - ${medication.frequency}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF7F8C8D)
+                        )
+                    }
                 }
                 
                 // Editable fields
@@ -565,6 +635,109 @@ fun EventCard(
                     modifier = Modifier.size(24.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun MedicationEditCard(
+    medication: ParsedMedicationEntity,
+    index: Int,
+    onUpdate: (String, String) -> Unit,
+    onRemove: () -> Unit,
+    canRemove: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = Color(0xFFE0E0E0),
+                shape = RoundedCornerShape(8.dp)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Medication ${index + 1}",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = DeepNavy
+                )
+                
+                if (canRemove) {
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Remove medication",
+                            tint = Color.Red,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+            
+            OutlinedTextField(
+                value = medication.name,
+                onValueChange = { onUpdate("name", it) },
+                label = { Text("Medication Name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = medication.dosage,
+                    onValueChange = { onUpdate("dosage", it) },
+                    label = { Text("Dosage") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                
+                OutlinedTextField(
+                    value = medication.frequency,
+                    onValueChange = { onUpdate("frequency", it) },
+                    label = { Text("Frequency") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+            
+            OutlinedTextField(
+                value = medication.duration,
+                onValueChange = { onUpdate("duration", it) },
+                label = { Text("Duration") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            
+            OutlinedTextField(
+                value = medication.instructions,
+                onValueChange = { onUpdate("instructions", it) },
+                label = { Text("Instructions") },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2
+            )
         }
     }
 }
