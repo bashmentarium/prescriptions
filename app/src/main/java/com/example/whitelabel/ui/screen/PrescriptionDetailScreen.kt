@@ -618,8 +618,7 @@ fun EventCard(
                     Text(
                         event.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF7F8C8D),
-                        maxLines = 2
+                        color = Color(0xFF7F8C8D)
                     )
                 }
             }

@@ -103,8 +103,7 @@ class MainActivity : ComponentActivity() {
         return when {
             medications.isEmpty() -> "Medication"
             medications.size == 1 -> medications.first().name
-            medications.size <= 3 -> medications.joinToString(", ") { it.name }
-            else -> "${medications.first().name} + ${medications.size - 1} more"
+            else -> medications.joinToString(", ") { it.name }
         }
     }
     

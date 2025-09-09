@@ -423,8 +423,7 @@ fun MedicationConfirmationCard(
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 14.sp
                             ),
-                            color = Color(0xFF7F8C8D),
-                            maxLines = 2
+                            color = Color(0xFF7F8C8D)
                         )
                     }
                     
