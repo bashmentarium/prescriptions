@@ -135,7 +135,8 @@ class PrescriptionRepository(private val database: AppDatabase) {
             durationDays = parsedPrescription.schedule.duration_days,
             startTimeMinutes = parsedPrescription.schedule.start_time_minutes,
             endTimeMinutes = parsedPrescription.schedule.end_time_minutes,
-            startDateMillis = System.currentTimeMillis()
+            startDateMillis = System.currentTimeMillis(),
+            intervalDays = parsedPrescription.schedule.interval_days
         )
         
         // Save prescription
@@ -164,9 +165,12 @@ class PrescriptionRepository(private val database: AppDatabase) {
             timeInMillis = prescription.startDateMillis
         }
         
-        repeat(prescription.durationDays) { dayIndex ->
+        // Calculate total number of doses based on interval
+        val totalDoses = (prescription.durationDays + prescription.intervalDays - 1) / prescription.intervalDays
+        
+        repeat(totalDoses) { doseIndex ->
             val dayCal = (cal.clone() as Calendar).apply {
-                add(Calendar.DAY_OF_YEAR, dayIndex)
+                add(Calendar.DAY_OF_YEAR, doseIndex * prescription.intervalDays)
             }
             
             // Create multiple events per day based on prescription and user settings

@@ -88,7 +88,8 @@ class RealAnthropicService(private val context: Context) : LlmService {
                             "with_food": boolean,
                             "duration_days": number,
                             "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
-                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM)
+                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
+                            "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
                         }
                     }
                     
@@ -102,6 +103,16 @@ class RealAnthropicService(private val context: Context) : LlmService {
                     - For multiple daily doses, spread them evenly between start and end times
                     - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
                     - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
+                    
+                    For intervals:
+                    - If "daily" or "every day" is mentioned, use interval_days: 1
+                    - If "every 2 days", "every other day", or "alternate days" is mentioned, use interval_days: 2
+                    - If "every 3 days" is mentioned, use interval_days: 3
+                    - If "every 4 days" is mentioned, use interval_days: 4
+                    - If "every 5 days" is mentioned, use interval_days: 5
+                    - If "weekly" or "once a week" is mentioned, use interval_days: 7
+                    - If "twice a week" is mentioned, use interval_days: 3 (approximately every 3 days)
+                    - If no specific interval is mentioned, use interval_days: 1 (daily)
                     
                     Prescription text: $text
                     
@@ -187,7 +198,8 @@ class RealAnthropicService(private val context: Context) : LlmService {
                             "with_food": boolean,
                             "duration_days": number,
                             "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
-                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM)
+                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
+                            "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
                         }
                     }
                     
@@ -201,6 +213,16 @@ class RealAnthropicService(private val context: Context) : LlmService {
                     - For multiple daily doses, spread them evenly between start and end times
                     - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
                     - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
+                    
+                    For intervals:
+                    - If "daily" or "every day" is mentioned, use interval_days: 1
+                    - If "every 2 days", "every other day", or "alternate days" is mentioned, use interval_days: 2
+                    - If "every 3 days" is mentioned, use interval_days: 3
+                    - If "every 4 days" is mentioned, use interval_days: 4
+                    - If "every 5 days" is mentioned, use interval_days: 5
+                    - If "weekly" or "once a week" is mentioned, use interval_days: 7
+                    - If "twice a week" is mentioned, use interval_days: 3 (approximately every 3 days)
+                    - If no specific interval is mentioned, use interval_days: 1 (daily)
                     
                     Respond with only the JSON, no additional text.
                 """.trimIndent()

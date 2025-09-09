@@ -20,6 +20,7 @@ data class PrescriptionEntity(
     val startTimeMinutes: Int,
     val endTimeMinutes: Int,
     val startDateMillis: Long = System.currentTimeMillis(), // Start date for the prescription
+    val intervalDays: Int = 1, // Interval between doses (1 = daily, 2 = every 2 days, etc.)
     val createdAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = true
 )

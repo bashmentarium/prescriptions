@@ -174,6 +174,7 @@ fun PrescriptionInfoCard(
     var isEditing by remember { mutableStateOf(false) }
     var editedDuration by remember { mutableStateOf(prescription.durationDays.toString()) }
     var editedFrequency by remember { mutableStateOf(prescription.timesPerDay.toString()) }
+    var editedInterval by remember { mutableStateOf(prescription.intervalDays.toString()) }
     var editedStartDate by remember { mutableStateOf(prescription.startDateMillis) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -265,6 +266,7 @@ fun PrescriptionInfoCard(
                                         val updatedPrescription = prescription.copy(
                                             durationDays = editedDuration.toIntOrNull() ?: prescription.durationDays,
                                             timesPerDay = editedFrequency.toIntOrNull() ?: prescription.timesPerDay,
+                                            intervalDays = editedInterval.toIntOrNull() ?: prescription.intervalDays,
                                             startDateMillis = editedStartDate
                                         )
                                         prescriptionRepository.updatePrescriptionAndRecalculateEvents(
@@ -331,6 +333,18 @@ fun PrescriptionInfoCard(
                         )
                     )
                     
+                    // Interval field
+                    OutlinedTextField(
+                        value = editedInterval,
+                        onValueChange = { editedInterval = it },
+                        label = { Text("Interval (days)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        ),
+                        supportingText = { Text("1 = daily, 2 = every 2 days, 3 = every 3 days, etc.") }
+                    )
+                    
                     // Start date field
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -363,8 +377,14 @@ fun PrescriptionInfoCard(
                     }
                 } else {
                     // Display mode
+                    val intervalText = if (prescription.intervalDays == 1) {
+                        "daily"
+                    } else {
+                        "every ${prescription.intervalDays} days"
+                    }
+                    
                     Text(
-                        "Schedule: ${prescription.timesPerDay} times per day for ${prescription.durationDays} days",
+                        "Schedule: ${prescription.timesPerDay} times per day, $intervalText for ${prescription.durationDays} days",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF7F8C8D)
                     )

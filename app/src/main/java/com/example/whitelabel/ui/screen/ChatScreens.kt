@@ -348,7 +348,13 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
     val isPrescriptionSpecific = schedule.start_time_minutes != 480 || schedule.end_time_minutes != 1200
     
     val scheduleInfo = buildString {
-        append("📅 Schedule: ${schedule.times_per_day} times per day for ${schedule.duration_days} days")
+        val intervalText = if (schedule.interval_days == 1) {
+            "daily"
+        } else {
+            "every ${schedule.interval_days} days"
+        }
+        
+        append("📅 Schedule: ${schedule.times_per_day} times per day, $intervalText for ${schedule.duration_days} days")
         
         if (isPrescriptionSpecific) {
             // Show prescription-specific times
