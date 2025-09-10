@@ -513,33 +513,60 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 )
                             }
                             
-                            // With Food Default
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            // Food Timing Default
+                            Text(
+                                "🍎 Default food timing:",
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 18.sp
+                                ),
+                                color = DeepNavy
+                            )
+                            Column(
+                                modifier = Modifier.selectableGroup()
                             ) {
-                                Text(
-                                    "🍎 Default: Take with food",
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 18.sp
-                                    ),
-                                    color = DeepNavy
+                                val foodTimingOptions = listOf(
+                                    com.example.whitelabel.data.FoodTiming.BEFORE_MEAL,
+                                    com.example.whitelabel.data.FoodTiming.DURING_MEAL,
+                                    com.example.whitelabel.data.FoodTiming.AFTER_MEAL,
+                                    com.example.whitelabel.data.FoodTiming.NEUTRAL
                                 )
-                                Switch(
-                                    checked = settings.withFoodDefault,
-                                    onCheckedChange = { checked ->
-                                        settings = settings.copy(withFoodDefault = checked)
-                                        settingsManager.updateWithFoodDefault(checked)
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.White,
-                                        checkedTrackColor = MintGreen,
-                                        uncheckedThumbColor = Color.White,
-                                        uncheckedTrackColor = Color(0xFFBDC3C7)
-                                    )
-                                )
+                                val foodTimingLabels = listOf("Before meal", "During meal", "After meal", "Neutral (no preference)")
+                                val foodTimingEmojis = listOf("🍽️", "🍽️", "🍽️", "⚪")
+                                
+                                foodTimingOptions.forEachIndexed { index, timing ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .selectable(
+                                                selected = settings.foodTimingDefault == timing,
+                                                onClick = {
+                                                    settings = settings.copy(foodTimingDefault = timing)
+                                                    settingsManager.updateFoodTimingDefault(timing)
+                                                }
+                                            )
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = settings.foodTimingDefault == timing,
+                                            onClick = {
+                                                settings = settings.copy(foodTimingDefault = timing)
+                                                settingsManager.updateFoodTimingDefault(timing)
+                                            },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = MintGreen,
+                                                unselectedColor = Color(0xFF7F8C8D)
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "${foodTimingEmojis[index]} ${foodTimingLabels[index]}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (settings.foodTimingDefault == timing) DeepNavy else Color(0xFF7F8C8D)
+                                        )
+                                    }
+                                }
                             }
                             
                             // Preferred Times
@@ -657,7 +684,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 color = DeepNavy
                             )
                             Text(
-                                "🍎 With food: ${if (settings.withFoodDefault) "Yes" else "No"}",
+                                "🍎 Food timing: ${when (settings.foodTimingDefault) {
+                                    com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> "Before meal"
+                                    com.example.whitelabel.data.FoodTiming.DURING_MEAL -> "During meal"
+                                    com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> "After meal"
+                                    com.example.whitelabel.data.FoodTiming.NEUTRAL -> "Neutral"
+                                }}",
                                 style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
                                 color = DeepNavy
                             )

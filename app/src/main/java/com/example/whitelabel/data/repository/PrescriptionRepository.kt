@@ -131,7 +131,7 @@ class PrescriptionRepository(private val database: AppDatabase) {
             medications = medicationEntities,
             timesPerDay = parsedPrescription.schedule.times_per_day,
             preferredTimes = parsedPrescription.schedule.preferred_times,
-            withFood = parsedPrescription.schedule.with_food,
+            foodTiming = parsedPrescription.schedule.food_timing,
             durationDays = parsedPrescription.schedule.duration_days,
             startTimeMinutes = parsedPrescription.schedule.start_time_minutes,
             endTimeMinutes = parsedPrescription.schedule.end_time_minutes,
@@ -199,18 +199,33 @@ class PrescriptionRepository(private val database: AppDatabase) {
                 userSettings.latestTimeMinutes
             }
             
-            // Calculate time slots
-            val timeSlots = if (timesPerDay <= 1) {
-                listOf(startTime)
-            } else {
-                val timeRange = endTime - startTime
-                val interval = timeRange / (timesPerDay - 1)
-                (0 until timesPerDay).map { index ->
-                    startTime + (interval * index)
+            // Calculate time slots with better distribution
+            val timeSlots = when (timesPerDay) {
+                1 -> listOf(startTime)
+                2 -> {
+                    // For 2 times per day, use morning and evening
+                    val morningTime = maxOf(startTime, 7 * 60 + 30) // 7:30 AM
+                    val eveningTime = minOf(endTime, 22 * 60) // 10:00 PM
+                    listOf(morningTime, eveningTime)
+                }
+                3 -> {
+                    // For 3 times per day, use morning, afternoon, evening
+                    val morningTime = maxOf(startTime, 8 * 60) // 8:00 AM
+                    val afternoonTime = (startTime + endTime) / 2 // Midday
+                    val eveningTime = minOf(endTime, 20 * 60) // 8:00 PM
+                    listOf(morningTime, afternoonTime, eveningTime)
+                }
+                else -> {
+                    // For more than 3 times, distribute evenly
+                    val timeRange = endTime - startTime
+                    val interval = timeRange / (timesPerDay - 1)
+                    (0 until timesPerDay).map { index ->
+                        startTime + (interval * index)
+                    }
                 }
             }
             
-            timeSlots.forEach { timeInMinutes ->
+            timeSlots.forEachIndexed { timeSlotIndex, timeInMinutes ->
                 val eventCal = (dayCal.clone() as Calendar).apply {
                     set(Calendar.HOUR_OF_DAY, timeInMinutes / 60)
                     set(Calendar.MINUTE, timeInMinutes % 60)
@@ -221,9 +236,9 @@ class PrescriptionRepository(private val database: AppDatabase) {
                 val start = eventCal.timeInMillis
                 val end = start + userSettings.eventDurationMinutes * 60 * 1000
                 
-                // Create event title and description
-                val title = buildEventTitle(prescription)
-                val description = buildEventDescription(prescription, userSettings)
+                // Create event title and description with only relevant medications for this time slot
+                val title = buildEventTitle(prescription, timeSlotIndex, timeSlots.size)
+                val description = buildEventDescription(prescription, userSettings, timeSlotIndex, timeSlots.size)
                 
                 val event = MedicationEventEntity(
                     prescriptionId = prescription.id,
@@ -240,16 +255,20 @@ class PrescriptionRepository(private val database: AppDatabase) {
         return events
     }
     
-    private fun buildEventTitle(prescription: PrescriptionEntity): String {
+    private fun buildEventTitle(prescription: PrescriptionEntity, timeSlotIndex: Int, totalTimeSlots: Int): String {
         val medications = prescription.medications
+        if (medications.isEmpty()) return "Medication"
+        
+        // For prescriptions with multiple medications, show all medications in each event
+        // This matches the expected behavior where each event shows all medications
         return when {
-            medications.isEmpty() -> "Medication"
             medications.size == 1 -> medications.first().name
             else -> medications.joinToString(", ") { it.name }
         }
     }
     
-    private fun buildEventDescription(prescription: PrescriptionEntity, userSettings: UserSettings): String {
+    private fun buildEventDescription(prescription: PrescriptionEntity, userSettings: UserSettings, timeSlotIndex: Int, totalTimeSlots: Int): String {
+        // Show all medications in each event description
         val medications = prescription.medications.joinToString("\n") { med ->
             "• ${med.name}: ${med.dosage} - ${med.frequency}"
         }
@@ -257,11 +276,20 @@ class PrescriptionRepository(private val database: AppDatabase) {
         val scheduleInfo = buildString {
             append("Schedule: ${prescription.timesPerDay} times per day")
             
-            // Use user's default with food setting if prescription doesn't specify
-            val withFood = prescription.withFood || (userSettings.withFoodDefault && !prescription.withFood)
-            if (withFood) {
-                append(" (with food)")
+            // Use prescription's food timing or user's default if prescription is neutral
+            val foodTiming = if (prescription.foodTiming == com.example.whitelabel.data.FoodTiming.NEUTRAL) {
+                userSettings.foodTimingDefault
+            } else {
+                prescription.foodTiming
             }
+            
+            val foodTimingText = when (foodTiming) {
+                com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> " (before meal)"
+                com.example.whitelabel.data.FoodTiming.DURING_MEAL -> " (during meal)"
+                com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> " (after meal)"
+                com.example.whitelabel.data.FoodTiming.NEUTRAL -> ""
+            }
+            append(foodTimingText)
             
             if (prescription.preferredTimes.isNotEmpty()) {
                 append("\nPreferred times: ${prescription.preferredTimes.joinToString(", ")}")
@@ -275,6 +303,7 @@ class PrescriptionRepository(private val database: AppDatabase) {
         
         return "$medications\n\n$scheduleInfo"
     }
+    
     
     // Update prescription and recalculate events
     suspend fun updatePrescriptionAndRecalculateEvents(

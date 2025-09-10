@@ -78,20 +78,22 @@ class RealAnthropicService(private val context: Context) : LlmService {
                                 "name": "medication name",
                                 "dosage": "dosage amount and form",
                                 "frequency": "how often to take",
-                                "duration": "how long to take",
+                                "duration": "how long to take (e.g., '7 days', '2 weeks', 'until finished')",
                                 "instructions": "special instructions"
                             }
                         ],
                         "schedule": {
                             "times_per_day": number,
                             "preferred_times": ["morning", "afternoon", "evening"],
-                            "with_food": boolean,
-                            "duration_days": number,
+                            "food_timing": "BEFORE_MEAL" | "DURING_MEAL" | "AFTER_MEAL" | "NEUTRAL",
+                            "duration_days": number (overall prescription duration in days),
                             "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
                             "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
                             "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
                         }
                     }
+                    
+                    IMPORTANT: Each medication may have a different duration. Extract the specific duration for each medication individually. If a medication doesn't specify a duration, use the overall prescription duration.
                     
                     For timing:
                     - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values
@@ -188,20 +190,22 @@ class RealAnthropicService(private val context: Context) : LlmService {
                                 "name": "medication name",
                                 "dosage": "dosage amount and form",
                                 "frequency": "how often to take",
-                                "duration": "how long to take",
+                                "duration": "how long to take (e.g., '7 days', '2 weeks', 'until finished')",
                                 "instructions": "special instructions"
                             }
                         ],
                         "schedule": {
                             "times_per_day": number,
                             "preferred_times": ["morning", "afternoon", "evening"],
-                            "with_food": boolean,
-                            "duration_days": number,
+                            "food_timing": "BEFORE_MEAL" | "DURING_MEAL" | "AFTER_MEAL" | "NEUTRAL",
+                            "duration_days": number (overall prescription duration in days),
                             "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
                             "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
                             "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
                         }
                     }
+                    
+                    IMPORTANT: Each medication may have a different duration. Extract the specific duration for each medication individually. If a medication doesn't specify a duration, use the overall prescription duration.
                     
                     For timing:
                     - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values

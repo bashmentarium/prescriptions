@@ -312,18 +312,28 @@ private fun buildEventTitle(prescription: ParsedPrescription): String {
 
 private fun buildEventDescription(prescription: ParsedPrescription, userSettings: UserSettings): String {
     val medications = prescription.medications.joinToString("\n") { med ->
-        "• ${med.name}: ${med.dosage} - ${med.frequency}"
+        val durationInfo = if (med.duration.isNotBlank()) " (${med.duration})" else ""
+        "• ${med.name}: ${med.dosage} - ${med.frequency}$durationInfo"
     }
     
     val schedule = prescription.schedule
     val scheduleInfo = buildString {
         append("Schedule: ${schedule.times_per_day} times per day")
         
-        // Use user's default with food setting if prescription doesn't specify
-        val withFood = schedule.with_food || (userSettings.withFoodDefault && !schedule.with_food)
-        if (withFood) {
-            append(" (with food)")
+        // Use prescription's food timing or user's default if prescription is neutral
+        val foodTiming = if (schedule.food_timing == com.example.whitelabel.data.FoodTiming.NEUTRAL) {
+            userSettings.foodTimingDefault
+        } else {
+            schedule.food_timing
         }
+        
+        val foodTimingText = when (foodTiming) {
+            com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> " (before meal)"
+            com.example.whitelabel.data.FoodTiming.DURING_MEAL -> " (during meal)"
+            com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> " (after meal)"
+            com.example.whitelabel.data.FoodTiming.NEUTRAL -> ""
+        }
+        append(foodTimingText)
         
         if (schedule.preferred_times.isNotEmpty()) {
             append("\nPreferred times: ${schedule.preferred_times.joinToString(", ")}")
@@ -340,7 +350,8 @@ private fun buildEventDescription(prescription: ParsedPrescription, userSettings
 
 private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceType: String): String {
     val medications = prescription.medications.joinToString("\n") { med ->
-        "• ${med.name}: ${med.dosage} - ${med.frequency}"
+        val durationInfo = if (med.duration.isNotBlank()) " (${med.duration})" else ""
+        "• ${med.name}: ${med.dosage} - ${med.frequency}$durationInfo"
     }
     
     val schedule = prescription.schedule
@@ -365,7 +376,7 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
             append("\n⏰ Timing: Will use your preferred time settings")
         }
         
-        if (schedule.with_food) {
+        if (schedule.food_timing != com.example.whitelabel.data.FoodTiming.NEUTRAL) {
             append("\n🍽️ Take with food")
         }
         if (schedule.preferred_times.isNotEmpty()) {
@@ -673,7 +684,7 @@ fun ChatDetailScreen(conversationId: String, onBack: () -> Unit, onOpenSchedule:
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = imageName.value!!,
+                                text = imageName.value ?: "",
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -1188,7 +1199,7 @@ fun ScheduleBuilderScreen(
                         }
                         Text("Duration: ${prescription.schedule.duration_days} days", style = MaterialTheme.typography.bodySmall)
                         Text("Times per day: ${prescription.schedule.times_per_day}", style = MaterialTheme.typography.bodySmall)
-                        if (prescription.schedule.with_food) {
+                        if (prescription.schedule.food_timing != com.example.whitelabel.data.FoodTiming.NEUTRAL) {
                             Text("Take with food", style = MaterialTheme.typography.bodySmall)
                         }
                     }

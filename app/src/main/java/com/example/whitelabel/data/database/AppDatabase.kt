@@ -18,6 +18,7 @@ import com.example.whitelabel.data.database.entities.ChatConversationEntity
 import com.example.whitelabel.data.database.entities.ChatMessageEntity
 import com.example.whitelabel.data.database.converters.MedicationListConverter
 import com.example.whitelabel.data.database.converters.StringListConverter
+import com.example.whitelabel.data.database.converters.FoodTimingConverter
 
 @Database(
     entities = [
@@ -27,12 +28,13 @@ import com.example.whitelabel.data.database.converters.StringListConverter
         ChatConversationEntity::class,
         ChatMessageEntity::class
     ],
-    version = 4,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(
     MedicationListConverter::class,
-    StringListConverter::class
+    StringListConverter::class,
+    FoodTimingConverter::class
 )
 abstract class AppDatabase : RoomDatabase() {
     
@@ -91,6 +93,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
         
+        // Migration from version 4 to 5
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add the new foodTiming column to prescriptions table
+                database.execSQL("ALTER TABLE prescriptions ADD COLUMN foodTiming TEXT NOT NULL DEFAULT 'NEUTRAL'")
+                // Drop the old withFood column
+                database.execSQL("ALTER TABLE prescriptions DROP COLUMN withFood")
+            }
+        }
+        
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -98,8 +110,9 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "whitelabel_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration() // For development - remove in production
+                .allowMainThreadQueries() // Allow main thread queries for development
                 .build()
                 INSTANCE = instance
                 instance

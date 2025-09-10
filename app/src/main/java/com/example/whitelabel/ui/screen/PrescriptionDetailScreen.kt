@@ -53,12 +53,21 @@ fun PrescriptionDetailScreen(
     val scope = rememberCoroutineScope()
     
     var prescription by remember { mutableStateOf<PrescriptionEntity?>(null) }
-    val events by prescriptionRepository.getEventsByPrescriptionId(prescriptionId).collectAsState(initial = emptyList())
+    val events by if (prescriptionId.isNotEmpty()) {
+        prescriptionRepository.getEventsByPrescriptionId(prescriptionId).collectAsState(initial = emptyList())
+    } else {
+        remember { mutableStateOf(emptyList<MedicationEventEntity>()) }
+    }
     var stats by remember { mutableStateOf<PrescriptionStats?>(null) }
     
     LaunchedEffect(prescriptionId) {
-        prescription = prescriptionRepository.getPrescriptionById(prescriptionId)
-        stats = prescriptionRepository.getPrescriptionStats(prescriptionId)
+        if (prescriptionId.isNotEmpty()) {
+            prescription = prescriptionRepository.getPrescriptionById(prescriptionId)
+            stats = prescriptionRepository.getPrescriptionStats(prescriptionId)
+        } else {
+            // If prescriptionId is empty, navigate back
+            onBack()
+        }
     }
     
     Box(
@@ -125,7 +134,7 @@ fun PrescriptionDetailScreen(
                         PrescriptionInfoCard(
                             prescription = prescription!!,
                             prescriptionRepository = prescriptionRepository,
-                            userSettings = remember { SettingsManager(context).getSettings() }
+                            userSettings = SettingsManager(context).getSettings()
                         )
                     }
                     
@@ -371,8 +380,9 @@ fun PrescriptionInfoCard(
                 } else {
                     // Display medications
                     prescription.medications.forEach { medication ->
+                        val durationInfo = if (medication.duration.isNotBlank()) " (${medication.duration})" else ""
                         Text(
-                            "• ${medication.name}: ${medication.dosage} - ${medication.frequency}",
+                            "• ${medication.name}: ${medication.dosage} - ${medication.frequency}$durationInfo",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF7F8C8D)
                         )
@@ -447,18 +457,6 @@ fun PrescriptionInfoCard(
                     }
                 } else {
                     // Display mode
-                    val intervalText = if (prescription.intervalDays == 1) {
-                        "daily"
-                    } else {
-                        "every ${prescription.intervalDays} days"
-                    }
-                    
-                    Text(
-                        "Schedule: ${prescription.timesPerDay} times per day, $intervalText for ${prescription.durationDays} days",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF7F8C8D)
-                    )
-                    
                     Text(
                         "Start Date: ${dateFormat.format(Date(prescription.startDateMillis))}",
                         style = MaterialTheme.typography.bodyMedium,
@@ -474,9 +472,15 @@ fun PrescriptionInfoCard(
                     )
                 }
                 
-                if (prescription.withFood) {
+                val foodTimingText = when (prescription.foodTiming) {
+                    com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> "🍽️ Take before meal"
+                    com.example.whitelabel.data.FoodTiming.DURING_MEAL -> "🍽️ Take during meal"
+                    com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> "🍽️ Take after meal"
+                    com.example.whitelabel.data.FoodTiming.NEUTRAL -> null
+                }
+                foodTimingText?.let { text ->
                     Text(
-                        "🍽️ Take with food",
+                        text,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF7F8C8D)
                     )
@@ -570,6 +574,13 @@ fun EventCard(
     val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
     val isPast = event.startTimeMillis < System.currentTimeMillis()
     
+    // Parse the description to extract structured information
+    val descriptionLines = event.description.split("\n").filter { it.isNotBlank() }
+    val medicationLines = descriptionLines.filter { it.startsWith("•") }
+    val scheduleLine = descriptionLines.find { it.startsWith("Schedule:") } ?: ""
+    val preferredTimesLine = descriptionLines.find { it.startsWith("Preferred times:") } ?: ""
+    val reminderLine = descriptionLines.find { it.startsWith("Reminder:") } ?: ""
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -614,25 +625,65 @@ fun EventCard(
                     color = Color(0xFF7F8C8D)
                 )
                 
-                if (event.description.isNotBlank()) {
+                // Display medication details
+                medicationLines.forEach { medicationLine ->
                     Text(
-                        event.description,
+                        medicationLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF7F8C8D)
+                    )
+                }
+                
+                // Display schedule information
+                if (scheduleLine.isNotEmpty()) {
+                    Text(
+                        scheduleLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF7F8C8D)
+                    )
+                }
+                
+                // Display preferred times
+                if (preferredTimesLine.isNotEmpty()) {
+                    Text(
+                        preferredTimesLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF7F8C8D)
+                    )
+                }
+                
+                // Display reminder information
+                if (reminderLine.isNotEmpty()) {
+                    Text(
+                        reminderLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF7F8C8D)
                     )
                 }
             }
             
-            // Completion toggle
-            IconButton(
-                onClick = { onToggleCompleted(event.id) }
+            // Clock icon and completion toggle
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    if (event.isCompleted) Icons.Filled.Check else Icons.Filled.Schedule,
-                    contentDescription = if (event.isCompleted) "Mark incomplete" else "Mark complete",
-                    tint = if (event.isCompleted) MintGreen else Color(0xFF7F8C8D),
-                    modifier = Modifier.size(24.dp)
+                    Icons.Filled.Schedule,
+                    contentDescription = "Time",
+                    tint = Color(0xFF7F8C8D),
+                    modifier = Modifier.size(20.dp)
                 )
+                
+                IconButton(
+                    onClick = { onToggleCompleted(event.id) }
+                ) {
+                    Icon(
+                        if (event.isCompleted) Icons.Filled.Check else Icons.Filled.Schedule,
+                        contentDescription = if (event.isCompleted) "Mark incomplete" else "Mark complete",
+                        tint = if (event.isCompleted) MintGreen else Color(0xFF7F8C8D),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
@@ -731,9 +782,9 @@ fun MedicationEditCard(
             )
             
             OutlinedTextField(
-                value = medication.instructions,
+                value = medication.instructions ?: "",
                 onValueChange = { onUpdate("instructions", it) },
-                label = { Text("Instructions") },
+                label = { Text("Instructions (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 2
             )

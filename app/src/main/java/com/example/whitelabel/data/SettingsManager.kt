@@ -47,9 +47,9 @@ class SettingsManager(private val context: Context) {
         saveSettings(currentSettings.copy(reminderMinutes = minutes))
     }
     
-    fun updateWithFoodDefault(withFood: Boolean) {
+    fun updateFoodTimingDefault(foodTiming: FoodTiming) {
         val currentSettings = getSettings()
-        saveSettings(currentSettings.copy(withFoodDefault = withFood))
+        saveSettings(currentSettings.copy(foodTimingDefault = foodTiming))
     }
     
     fun updatePreferredTimes(times: List<String>) {

@@ -228,13 +228,32 @@ fun PrescriptionCard(
                     )
                 }
                 
-                // With food indicator
-                if (prescription.withFood) {
-                    Text(
-                        "🍽️ Take with food",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF7F8C8D)
-                    )
+                // Food timing indicator
+                when (prescription.foodTiming) {
+                    com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> {
+                        Text(
+                            "🍽️ Take before meals",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF7F8C8D)
+                        )
+                    }
+                    com.example.whitelabel.data.FoodTiming.DURING_MEAL -> {
+                        Text(
+                            "🍽️ Take with meals",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF7F8C8D)
+                        )
+                    }
+                    com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> {
+                        Text(
+                            "🍽️ Take after meals",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF7F8C8D)
+                        )
+                    }
+                    com.example.whitelabel.data.FoodTiming.NEUTRAL -> {
+                        // Don't show anything for neutral timing
+                    }
                 }
                 
                 // Action buttons

@@ -3,11 +3,13 @@ package com.example.whitelabel.data.database.entities
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
+import com.example.whitelabel.data.FoodTiming
+import com.example.whitelabel.data.database.converters.FoodTimingConverter
 import com.example.whitelabel.data.database.converters.MedicationListConverter
 import com.example.whitelabel.data.database.converters.StringListConverter
 
 @Entity(tableName = "prescriptions")
-@TypeConverters(MedicationListConverter::class, StringListConverter::class)
+@TypeConverters(MedicationListConverter::class, StringListConverter::class, FoodTimingConverter::class)
 data class PrescriptionEntity(
     @PrimaryKey
     val id: String,
@@ -15,7 +17,7 @@ data class PrescriptionEntity(
     val medications: List<ParsedMedicationEntity>,
     val timesPerDay: Int,
     val preferredTimes: List<String>,
-    val withFood: Boolean,
+    val foodTiming: FoodTiming,
     val durationDays: Int,
     val startTimeMinutes: Int,
     val endTimeMinutes: Int,
@@ -34,5 +36,5 @@ data class ParsedMedicationEntity(
     val dosage: String,
     val frequency: String,
     val duration: String,
-    val instructions: String
+    val instructions: String? = null
 )

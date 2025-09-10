@@ -120,11 +120,20 @@ class MainActivity : ComponentActivity() {
         val scheduleInfo = buildString {
             append("Schedule: ${schedule.times_per_day} times per day")
             
-            // Use user's default with food setting if prescription doesn't specify
-            val withFood = schedule.with_food || (userSettings.withFoodDefault && !schedule.with_food)
-            if (withFood) {
-                append(" (with food)")
+            // Use prescription's food timing or user's default if prescription is neutral
+            val foodTiming = if (schedule.food_timing == com.example.whitelabel.data.FoodTiming.NEUTRAL) {
+                userSettings.foodTimingDefault
+            } else {
+                schedule.food_timing
             }
+            
+            val foodTimingText = when (foodTiming) {
+                com.example.whitelabel.data.FoodTiming.BEFORE_MEAL -> " (before meal)"
+                com.example.whitelabel.data.FoodTiming.DURING_MEAL -> " (during meal)"
+                com.example.whitelabel.data.FoodTiming.AFTER_MEAL -> " (after meal)"
+                com.example.whitelabel.data.FoodTiming.NEUTRAL -> ""
+            }
+            append(foodTimingText)
             
             if (schedule.preferred_times.isNotEmpty()) {
                 append("\nPreferred times: ${schedule.preferred_times.joinToString(", ")}")
@@ -141,21 +150,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Initialize notification services
-        MedicationNotificationService.createNotificationChannel(this)
+        // Initialize notification services (with error handling)
+        try {
+            MedicationNotificationService.createNotificationChannel(this)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to create notification channel: ${e.message}")
+        }
         
-        // Initialize Firebase Messaging
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w("MainActivity", "Fetching FCM registration token failed", task.exception)
-                return@addOnCompleteListener
+        // Initialize Firebase Messaging (with error handling)
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.w("MainActivity", "Fetching FCM registration token failed", task.exception)
+                    return@addOnCompleteListener
+                }
+                
+                // Get new FCM registration token
+                val token = task.result
+                Log.d("MainActivity", "FCM Registration Token: $token")
+                
+                // TODO: Send token to your server if needed
             }
-            
-            // Get new FCM registration token
-            val token = task.result
-            Log.d("MainActivity", "FCM Registration Token: $token")
-            
-            // TODO: Send token to your server if needed
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize Firebase Messaging: ${e.message}")
         }
         
         // Request notification permission for Android 13+
@@ -166,17 +183,22 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "Android version < 13, no notification permission needed")
         }
         
-        // Start medication reminder scheduler
-        val reminderScheduler = MedicationReminderScheduler(this)
-        reminderScheduler.scheduleMedicationReminders()
-        
-        // Start foreground service for reliable background notifications
-        MedicationForegroundService.startService(this)
-        
-        // Set up repository with reminder scheduler
-        val database = AppDatabase.getDatabase(this)
-        val repository = PrescriptionRepository(database)
-        repository.setReminderScheduler(reminderScheduler)
+        // Start medication reminder scheduler (with error handling)
+        try {
+            val reminderScheduler = MedicationReminderScheduler(this)
+            reminderScheduler.scheduleMedicationReminders()
+            
+            // Start foreground service for reliable background notifications
+            MedicationForegroundService.startService(this)
+            
+            // Set up repository with reminder scheduler
+            val database = AppDatabase.getDatabase(this)
+            val repository = PrescriptionRepository(database)
+            repository.setReminderScheduler(reminderScheduler)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize services: ${e.message}")
+            // Continue with app launch even if services fail
+        }
         
         setContent {
             WhitelabelTheme {
