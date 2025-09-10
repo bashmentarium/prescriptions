@@ -70,51 +70,26 @@ class RealAnthropicService(private val context: Context) : LlmService {
 
 
                 val prompt = """
-                    You are a medical prescription parser. Extract the following information from this prescription text and format it as JSON:
+                    You are a medical prescription parser. Extract ONLY the medication information from this prescription text and format it as JSON:
                     
                     {
                         "medications": [
                             {
                                 "name": "medication name",
                                 "dosage": "dosage amount and form",
-                                "frequency": "how often to take",
+                                "frequency": "how often to take (e.g., 'twice daily', 'once a day', '3 times per day')",
                                 "duration": "how long to take (e.g., '7 days', '2 weeks', 'until finished')",
-                                "instructions": "special instructions"
+                                "instructions": "special instructions including food timing (e.g., 'take with food', 'on empty stomach', 'before meals')"
                             }
-                        ],
-                        "schedule": {
-                            "times_per_day": number,
-                            "preferred_times": ["morning", "afternoon", "evening"],
-                            "food_timing": "BEFORE_MEAL" | "DURING_MEAL" | "AFTER_MEAL" | "NEUTRAL",
-                            "duration_days": number (overall prescription duration in days),
-                            "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
-                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
-                            "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
-                        }
+                        ]
                     }
                     
-                    IMPORTANT: Each medication may have a different duration. Extract the specific duration for each medication individually. If a medication doesn't specify a duration, use the overall prescription duration.
-                    
-                    For timing:
-                    - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values
-                    - If "morning" is mentioned, use 480 (8:00 AM) as start_time_minutes
-                    - If "afternoon" is mentioned, use 840 (2:00 PM) as start_time_minutes  
-                    - If "evening" is mentioned, use 1200 (8:00 PM) as start_time_minutes
-                    - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
-                    - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
-                    - For multiple daily doses, spread them evenly between start and end times
-                    - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
-                    - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
-                    
-                    For intervals:
-                    - If "daily" or "every day" is mentioned, use interval_days: 1
-                    - If "every 2 days", "every other day", or "alternate days" is mentioned, use interval_days: 2
-                    - If "every 3 days" is mentioned, use interval_days: 3
-                    - If "every 4 days" is mentioned, use interval_days: 4
-                    - If "every 5 days" is mentioned, use interval_days: 5
-                    - If "weekly" or "once a week" is mentioned, use interval_days: 7
-                    - If "twice a week" is mentioned, use interval_days: 3 (approximately every 3 days)
-                    - If no specific interval is mentioned, use interval_days: 1 (daily)
+                    IMPORTANT: 
+                    - Extract ONLY medication information, do not include any schedule or timing information
+                    - Each medication may have a different duration - extract the specific duration for each medication individually
+                    - Include any food timing instructions in the instructions field (e.g., "take with food", "on empty stomach", "before meals")
+                    - Be as specific as possible with frequency (e.g., "twice daily", "once every 8 hours", "3 times per day")
+                    - If a medication doesn't specify a duration, use "until finished" or "as needed"
                     
                     Prescription text: $text
                     
@@ -182,51 +157,26 @@ class RealAnthropicService(private val context: Context) : LlmService {
                 }
                 
                 val prompt = """
-                    You are a medical prescription parser. Analyze this prescription image and extract the following information, formatting it as JSON:
+                    You are a medical prescription parser. Analyze this prescription image and extract ONLY the medication information, formatting it as JSON:
                     
                     {
                         "medications": [
                             {
                                 "name": "medication name",
                                 "dosage": "dosage amount and form",
-                                "frequency": "how often to take",
+                                "frequency": "how often to take (e.g., 'twice daily', 'once a day', '3 times per day')",
                                 "duration": "how long to take (e.g., '7 days', '2 weeks', 'until finished')",
-                                "instructions": "special instructions"
+                                "instructions": "special instructions including food timing (e.g., 'take with food', 'on empty stomach', 'before meals')"
                             }
-                        ],
-                        "schedule": {
-                            "times_per_day": number,
-                            "preferred_times": ["morning", "afternoon", "evening"],
-                            "food_timing": "BEFORE_MEAL" | "DURING_MEAL" | "AFTER_MEAL" | "NEUTRAL",
-                            "duration_days": number (overall prescription duration in days),
-                            "start_time_minutes": number (minutes from midnight for first dose, default 480 for 8:00 AM),
-                            "end_time_minutes": number (minutes from midnight for last dose, default 1200 for 8:00 PM),
-                            "interval_days": number (interval between doses: 1 = daily, 2 = every 2 days, 3 = every 3 days, etc., default 1)
-                        }
+                        ]
                     }
                     
-                    IMPORTANT: Each medication may have a different duration. Extract the specific duration for each medication individually. If a medication doesn't specify a duration, use the overall prescription duration.
-                    
-                    For timing:
-                    - If specific times are mentioned (e.g., "8 AM", "morning", "breakfast"), use appropriate minute values
-                    - If "morning" is mentioned, use 480 (8:00 AM) as start_time_minutes
-                    - If "afternoon" is mentioned, use 840 (2:00 PM) as start_time_minutes  
-                    - If "evening" is mentioned, use 1200 (8:00 PM) as start_time_minutes
-                    - If "night" or "bedtime" is mentioned, use 1320 (10:00 PM) as start_time_minutes
-                    - Set end_time_minutes to be 2-4 hours after start_time_minutes for single daily doses
-                    - For multiple daily doses, spread them evenly between start and end times
-                    - IMPORTANT: Only set specific start_time_minutes and end_time_minutes if the prescription explicitly specifies exact times
-                    - If the prescription only mentions general periods (morning, evening, etc.), use the default values and let the user's preferred time settings take precedence
-                    
-                    For intervals:
-                    - If "daily" or "every day" is mentioned, use interval_days: 1
-                    - If "every 2 days", "every other day", or "alternate days" is mentioned, use interval_days: 2
-                    - If "every 3 days" is mentioned, use interval_days: 3
-                    - If "every 4 days" is mentioned, use interval_days: 4
-                    - If "every 5 days" is mentioned, use interval_days: 5
-                    - If "weekly" or "once a week" is mentioned, use interval_days: 7
-                    - If "twice a week" is mentioned, use interval_days: 3 (approximately every 3 days)
-                    - If no specific interval is mentioned, use interval_days: 1 (daily)
+                    IMPORTANT: 
+                    - Extract ONLY medication information, do not include any schedule or timing information
+                    - Each medication may have a different duration - extract the specific duration for each medication individually
+                    - Include any food timing instructions in the instructions field (e.g., "take with food", "on empty stomach", "before meals")
+                    - Be as specific as possible with frequency (e.g., "twice daily", "once every 8 hours", "3 times per day")
+                    - If a medication doesn't specify a duration, use "until finished" or "as needed"
                     
                     Respond with only the JSON, no additional text.
                 """.trimIndent()

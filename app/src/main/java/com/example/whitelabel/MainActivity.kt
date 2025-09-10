@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
             "• ${med.name}: ${med.dosage} - ${med.frequency}"
         }
         
-        val schedule = prescription.schedule
+        val schedule = prescription.schedule ?: com.example.whitelabel.data.ScheduleAggregator.aggregateScheduleFromMedications(prescription.medications)
         val scheduleInfo = buildString {
             append("Schedule: ${schedule.times_per_day} times per day")
             

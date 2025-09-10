@@ -2,6 +2,8 @@
 package com.example.whitelabel.data.repository
 
 import com.example.whitelabel.data.ParsedPrescription
+import com.example.whitelabel.data.ParsedMedicationsOnly
+import com.example.whitelabel.data.ScheduleAggregator
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.database.AppDatabase
 import com.example.whitelabel.data.database.entities.MedicationEventEntity
@@ -104,7 +106,62 @@ class PrescriptionRepository(private val database: AppDatabase) {
         eventDao.updateCalendarEventId(eventId, calendarEventId)
     }
     
-    // Convert ParsedPrescription to PrescriptionEntity and create events
+    // Convert ParsedMedicationsOnly to PrescriptionEntity and create events (new method)
+    suspend fun createPrescriptionWithEventsFromMedications(
+        parsedMedications: ParsedMedicationsOnly,
+        userSettings: UserSettings,
+        title: String = "Prescription ${System.currentTimeMillis()}"
+    ): String {
+        val prescriptionId = UUID.randomUUID().toString()
+        
+        // Convert ParsedMedication to ParsedMedicationEntity
+        val medicationEntities = parsedMedications.medications.map { med ->
+            ParsedMedicationEntity(
+                prescriptionId = prescriptionId,
+                name = med.name,
+                dosage = med.dosage,
+                frequency = med.frequency,
+                duration = med.duration,
+                instructions = med.instructions
+            )
+        }
+        
+        // Aggregate schedule from medications
+        val aggregatedSchedule = ScheduleAggregator.aggregateScheduleFromMedications(parsedMedications.medications)
+        
+        // Create PrescriptionEntity
+        val prescriptionEntity = PrescriptionEntity(
+            id = prescriptionId,
+            title = title,
+            medications = medicationEntities,
+            timesPerDay = aggregatedSchedule.times_per_day,
+            preferredTimes = aggregatedSchedule.preferred_times,
+            foodTiming = aggregatedSchedule.food_timing,
+            durationDays = aggregatedSchedule.duration_days,
+            startTimeMinutes = aggregatedSchedule.start_time_minutes,
+            endTimeMinutes = aggregatedSchedule.end_time_minutes,
+            startDateMillis = System.currentTimeMillis(),
+            intervalDays = aggregatedSchedule.interval_days
+        )
+        
+        // Save prescription
+        prescriptionDao.insertPrescription(prescriptionEntity)
+        
+        // Create medication events
+        val events = createMedicationEvents(prescriptionEntity, userSettings)
+        eventDao.insertEvents(events)
+        
+        // Schedule notification reminders for each event
+        reminderScheduler?.let { scheduler ->
+            events.forEach { event ->
+                scheduler.scheduleSpecificReminder(event, prescriptionEntity.title)
+            }
+        }
+        
+        return prescriptionId
+    }
+    
+    // Convert ParsedPrescription to PrescriptionEntity and create events (legacy method for backward compatibility)
     suspend fun createPrescriptionWithEvents(
         parsedPrescription: ParsedPrescription,
         userSettings: UserSettings,
@@ -124,19 +181,22 @@ class PrescriptionRepository(private val database: AppDatabase) {
             )
         }
         
+        // Use provided schedule or aggregate from medications if schedule is null
+        val schedule = parsedPrescription.schedule ?: ScheduleAggregator.aggregateScheduleFromMedications(parsedPrescription.medications)
+        
         // Create PrescriptionEntity
         val prescriptionEntity = PrescriptionEntity(
             id = prescriptionId,
             title = title,
             medications = medicationEntities,
-            timesPerDay = parsedPrescription.schedule.times_per_day,
-            preferredTimes = parsedPrescription.schedule.preferred_times,
-            foodTiming = parsedPrescription.schedule.food_timing,
-            durationDays = parsedPrescription.schedule.duration_days,
-            startTimeMinutes = parsedPrescription.schedule.start_time_minutes,
-            endTimeMinutes = parsedPrescription.schedule.end_time_minutes,
+            timesPerDay = schedule.times_per_day,
+            preferredTimes = schedule.preferred_times,
+            foodTiming = schedule.food_timing,
+            durationDays = schedule.duration_days,
+            startTimeMinutes = schedule.start_time_minutes,
+            endTimeMinutes = schedule.end_time_minutes,
             startDateMillis = System.currentTimeMillis(),
-            intervalDays = parsedPrescription.schedule.interval_days
+            intervalDays = schedule.interval_days
         )
         
         // Save prescription

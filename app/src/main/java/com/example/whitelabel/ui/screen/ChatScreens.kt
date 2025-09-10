@@ -59,6 +59,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.whitelabel.data.LlmService
 import com.example.whitelabel.data.RealAnthropicService
 import com.example.whitelabel.data.ParsedPrescription
+import com.example.whitelabel.data.ParsedMedicationsOnly
+import com.example.whitelabel.data.ScheduleAggregator
 import com.example.whitelabel.data.SettingsManager
 import com.example.whitelabel.data.UserSettings
 import com.example.whitelabel.data.database.AppDatabase
@@ -316,7 +318,7 @@ private fun buildEventDescription(prescription: ParsedPrescription, userSettings
         "• ${med.name}: ${med.dosage} - ${med.frequency}$durationInfo"
     }
     
-    val schedule = prescription.schedule
+    val schedule = prescription.schedule ?: ScheduleAggregator.aggregateScheduleFromMedications(prescription.medications)
     val scheduleInfo = buildString {
         append("Schedule: ${schedule.times_per_day} times per day")
         
@@ -354,7 +356,7 @@ private fun buildHumanReadableMessage(prescription: ParsedPrescription, sourceTy
         "• ${med.name}: ${med.dosage} - ${med.frequency}$durationInfo"
     }
     
-    val schedule = prescription.schedule
+    val schedule = prescription.schedule ?: ScheduleAggregator.aggregateScheduleFromMedications(prescription.medications)
     val isPrescriptionSpecific = schedule.start_time_minutes != 480 || schedule.end_time_minutes != 1200
     
     val scheduleInfo = buildString {
@@ -930,8 +932,17 @@ fun ChatDetailScreen(conversationId: String, onBack: () -> Unit, onOpenSchedule:
                                         is com.example.whitelabel.data.LlmResult.Success -> {
                                             val jsonText = result.normalizedSchedule
                                             try {
-                                                // Parse the JSON response into ParsedPrescription
-                                                val prescription = gson.fromJson(jsonText, ParsedPrescription::class.java)
+                                                // Parse the JSON response into ParsedMedicationsOnly
+                                                val medicationsOnly = gson.fromJson(jsonText, ParsedMedicationsOnly::class.java)
+                                                
+                                                // Aggregate schedule from medications
+                                                val aggregatedSchedule = ScheduleAggregator.aggregateScheduleFromMedications(medicationsOnly.medications)
+                                                
+                                                // Create ParsedPrescription with aggregated schedule
+                                                val prescription = ParsedPrescription(
+                                                    medications = medicationsOnly.medications,
+                                                    schedule = aggregatedSchedule
+                                                )
                                                 parsedPrescription.value = prescription
                                                 
                                                 // Create human-readable message
@@ -1139,11 +1150,12 @@ fun ScheduleBuilderScreen(
     // Apply prescription overrides if available
     LaunchedEffect(parsedPrescription) {
         parsedPrescription?.let { prescription ->
+            val schedule = prescription.schedule ?: ScheduleAggregator.aggregateScheduleFromMedications(prescription.medications)
+            
             // Set duration days from prescription
-            days.value = prescription.schedule.duration_days
+            days.value = schedule.duration_days
             
             // Check if prescription has specific times (not defaults)
-            val schedule = prescription.schedule
             val isPrescriptionSpecific = schedule.start_time_minutes != 480 || schedule.end_time_minutes != 1200
             
             if (isPrescriptionSpecific) {
@@ -1197,9 +1209,10 @@ fun ScheduleBuilderScreen(
                         prescription.medications.forEach { med ->
                             Text("• ${med.name}: ${med.dosage} - ${med.frequency}", style = MaterialTheme.typography.bodySmall)
                         }
-                        Text("Duration: ${prescription.schedule.duration_days} days", style = MaterialTheme.typography.bodySmall)
-                        Text("Times per day: ${prescription.schedule.times_per_day}", style = MaterialTheme.typography.bodySmall)
-                        if (prescription.schedule.food_timing != com.example.whitelabel.data.FoodTiming.NEUTRAL) {
+                        val schedule = prescription.schedule ?: ScheduleAggregator.aggregateScheduleFromMedications(prescription.medications)
+                        Text("Duration: ${schedule.duration_days} days", style = MaterialTheme.typography.bodySmall)
+                        Text("Times per day: ${schedule.times_per_day}", style = MaterialTheme.typography.bodySmall)
+                        if (schedule.food_timing != com.example.whitelabel.data.FoodTiming.NEUTRAL) {
                             Text("Take with food", style = MaterialTheme.typography.bodySmall)
                         }
                     }
